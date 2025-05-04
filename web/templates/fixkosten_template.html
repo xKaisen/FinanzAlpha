@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>FinanzApp Fixkosten verwalten v{{ version }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg:#fff; --fg:#111; --panel:#f5f5f5;
+      --accent:#1db954; --text-light:#666;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:#121212; --fg:#e1e1e1; --panel:#1e1e1e;
+        --accent:#1ed760; --text-light:#888;
+      }
+    }
+    * { box-sizing: border-box; margin:0; padding:0; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family:"Segoe UI", Roboto, sans-serif;
+      display:flex; flex-direction:column; min-height:100vh;
+    }
+    header {
+      background: var(--panel); padding:1rem 2rem;
+      display:flex; justify-content:space-between; align-items:center;
+      box-shadow:0 2px 4px rgba(0,0,0,.1);
+    }
+    header h1 { font-size:1.5rem; }
+    header .user { font-size:.9rem; color:var(--text-light); }
+    header .logout {
+      background:none; border:none; color:var(--accent);
+      text-decoration:underline; cursor:pointer;
+      padding:0; font-size:.9rem;
+    }
+
+    /* toolbar wie im Dashboard, aber sticky */
+    .toolbar {
+      background: var(--panel);
+      padding:1rem 2rem;
+      display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;
+      position: sticky; top: 0; z-index: 10;
+      box-shadow: 0 1px 2px rgba(0,0,0,.1);
+    }
+    .toolbar a.nav-btn,
+    .toolbar button.nav-btn {
+      padding:.5rem 1rem;
+      background:var(--accent);
+      color:#fff;
+      border:none;
+      border-radius:4px;
+      text-decoration:none;
+      font-size:1rem;
+      cursor:pointer;
+    }
+    .toolbar button.delete-btn {
+      background:#e0245e;
+    }
+    .add-form input {
+      padding:.5rem;
+      border:1px solid var(--text-light);
+      border-radius:4px;
+      background:var(--bg);
+      color:var(--fg);
+      font-size:1rem;
+    }
+    .add-form input:nth-child(1) { flex:1 1 150px; }
+    .add-form input:nth-child(2) { flex:1 1 150px; }
+    .add-form input:nth-child(3),
+    .add-form input:nth-child(4),
+    .add-form input:nth-child(5) {
+      width:6rem;
+    }
+
+    main { flex:1; padding:0; }
+    table {
+      width:100%; border-collapse:collapse;
+      background:var(--panel); border-radius:6px;
+      overflow:hidden; margin:1rem 2rem;
+    }
+    th, td {
+      padding:.75rem 1rem; text-align:left;
+    }
+    th {
+      background:var(--bg); font-weight:600;
+      border-bottom:2px solid var(--accent);
+    }
+    tbody tr:nth-child(odd)  { background:var(--bg); }
+    tbody tr:nth-child(even) { background:var(--panel); }
+    input[type="checkbox"] {
+      width:20px; height:20px; transform:scale(1.3); cursor:pointer;
+    }
+
+    footer {
+      padding:1rem 2rem; text-align:center;
+      background:var(--panel); color:var(--text-light);
+      font-size:.9rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Fixkosten verwalten v{{ version }}</h1>
+  <div>
+    <span class="user">Angemeldet als {{ username }}</span>
+    &nbsp;|&nbsp;
+    <form action="{{ url_for('logout') }}" method="get" style="display:inline">
+      <button type="submit" class="logout">Abmelden</button>
+    </form>
+  </div>
+</header>
+
+<div class="toolbar">
+  <!-- Löschen -->
+  <form id="delete-form" method="post" action="{{ url_for('fixkosten') }}" style="display:flex; gap:.75rem; align-items:center;">
+    <input type="hidden" name="delete_fix" value="1">
+    <button type="button" class="nav-btn delete-btn" onclick="deleteSelected()">Ausgewählte löschen</button>
+  </form>
+  <!-- Dashboard -->
+  <a href="{{ url_for('dashboard') }}" class="nav-btn">Dashboard</a>
+  <!-- Hinzufügen -->
+  <form class="add-form" method="post" action="{{ url_for('fixkosten') }}" style="display:flex; gap:.75rem; align-items:center; margin-left:auto;">
+    <input type="hidden" name="add_fix" value="1">
+    <input type="text" name="description" placeholder="Name/Firma" required>
+    <input type="text" name="usage" placeholder="Verwendungszweck" required>
+    <input type="number" step="0.01" name="amount" placeholder="Betrag" required>
+    <input type="number" name="duration" placeholder="Dauer" required>
+    <input type="date" name="start_date" value="{{ today }}" required>
+    <button type="submit" class="nav-btn">Hinzufügen</button>
+  </form>
+</div>
+
+<main>
+  <form id="table-form" method="post" action="{{ url_for('fixkosten') }}">
+    <input type="hidden" name="delete_fix" value="1">
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" onclick="toggleAllCheckboxes(this)"></th>
+          <th>Name / Firma</th>
+          <th>Verwendungszweck</th>
+          <th>Betrag (€)</th>
+          <th>Dauer (M)</th>
+          <th>Startdatum</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for id, desc, usage, amt, dur, start in fixes %}
+        <tr>
+          <td><input type="checkbox" name="delete_id" value="{{ id }}" class="chk"></td>
+          <td>{{ desc }}</td>
+          <td>{{ usage }}</td>
+          <td>{{ "%.2f"|format(amt) }} €</td>
+          <td>{{ dur }}</td>
+          <td>{{ start }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center; padding:2rem;">
+            Keine Fixkosten-Einträge gefunden.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </form>
+</main>
+
+<footer>
+  © 2025 xKAISEN – Version {{ version }}
+</footer>
+
+<script>
+  function toggleAllCheckboxes(source) {
+    const checkboxes = document.querySelectorAll('.chk');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+  }
+
+  function deleteSelected() {
+    const form = document.getElementById('table-form');
+    const checkboxes = document.querySelectorAll('.chk:checked');
+    if (checkboxes.length > 0) {
+      form.submit();
+    } else {
+      alert('Bitte wählen Sie mindestens einen Eintrag zum Löschen aus.');
+    }
+  }
+</script>
+
+</body>
+</html>

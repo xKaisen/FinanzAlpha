@@ -1,12 +1,15 @@
 import re
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget
+from constants import resource_path  # zentrale Pfadfunktion verwenden
+# utils.py (Ergänzungen)
+import re
+from decimal import Decimal
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QWidget
+from constants import resource_path
 
 def set_unified_font(widget: QWidget, pt_size: int = 13):
-    """
-    Setzt für ein Widget (und alle seine Kinder) eine einheitliche
-    Punktgröße für die Schriftart.
-    """
     font = QFont()
     font.setPointSize(pt_size)
     widget.setFont(font)
@@ -14,15 +17,6 @@ def set_unified_font(widget: QWidget, pt_size: int = 13):
         child.setFont(font)
 
 def check_password(password: str) -> (bool, str):
-    """
-    Prüft, ob das Passwort den folgenden Kriterien entspricht:
-    - Mindestens 8 Zeichen
-    - Kein Leerzeichen
-    - Mindestens ein Großbuchstabe
-    - Mindestens ein Kleinbuchstabe
-    - Mindestens eine Zahl
-    - Mindestens ein Sonderzeichen aus !@#$%^&*(),.?\":{}|<>
-    """
     if len(password) < 8:
         return False, "Mindestens 8 Zeichen."
     if re.search(r"\s", password):
@@ -36,3 +30,14 @@ def check_password(password: str) -> (bool, str):
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
         return False, "Mindestens ein Sonderzeichen."
     return True, ""
+
+def format_euro(value: Decimal) -> str:
+    return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def saldo_color(value: Decimal) -> str:
+    return "#32CD32" if value >= 0 else "#FF0000"
+
+def open_amount_color(open_sum: Decimal, is_dark_mode: bool) -> str:
+    if open_sum < 0:
+        return "#FF0000"
+    return "#FFFFFF" if is_dark_mode else "#000000"

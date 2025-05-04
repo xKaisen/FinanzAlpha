@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de" class="">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}FinanzApp{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script>
+    // Dark Mode Unterstützung
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
+</head>
+<body>
+  <header class="navbar">
+    <h1 class="logo">FinanzApp</h1>
+    {% if session.get('username') %}
+    <nav>
+      <span class="nav-user">Hi, {{ session.username }}</span>
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </nav>
+    {% endif %}
+  </header>
+
+  <main class="container">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}
+        <div class="flash-container">
+        {% for category, m in msgs %}
+          <div class="flash flash-{{ category }}">{{ m }}</div>
+        {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    Version {{ version }} © 2025 xKAISEN
+  </footer>
+</body>
+</html>

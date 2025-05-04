@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>FinanzApp Dashboard v{{ version }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #fff; --fg: #111; --panel: #f5f5f5;
+      --accent: #1db954; --text-light: #666;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121212; --fg: #e1e1e1; --panel: #1e1e1e;
+        --accent: #1ed760; --text-light: #888;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+    header {
+      background: var(--panel); padding: 1rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,.1);
+    }
+    header h1 { font-size: 1.5rem; }
+    header .user { font-size: .9rem; color: var(--text-light); }
+    header .logout {
+      background: none; border: none; color: var(--accent);
+      text-decoration: underline; cursor: pointer;
+      padding: 0; font-size: .9rem;
+    }
+    .toolbar {
+      background: var(--panel);
+      padding: 1rem 2rem;
+      display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
+    }
+    .toolbar a.nav-btn {
+      padding: .5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .search-wrapper {
+      position: relative; flex: 2 1 400px;
+    }
+    .search-wrapper input {
+      width: 100%; padding: .5rem 2rem .5rem .5rem;
+      border: 1px solid var(--text-light);
+      border-radius: 4px; background: var(--bg); color: var(--fg);
+    }
+    .search-wrapper button {
+      position: absolute; right: 4px; top: 50%;
+      transform: translateY(-50%);
+      background: none; border: none;
+      color: var(--text-light); font-size: 1.1rem;
+      cursor: pointer;
+    }
+    .toolbar select, .toolbar input {
+      padding: .5rem; border: 1px solid var(--text-light);
+      border-radius: 4px; background: var(--bg); color: var(--fg);
+    }
+    .toolbar label {
+      font-size: .9rem; color: var(--fg);
+    }
+    .saldo-box {
+      display: flex; justify-content: space-between;
+      padding: 1rem 2rem; margin-top: 1rem;
+      background: var(--panel);
+      font-size: 1.25rem; font-weight: bold;
+    }
+    .saldo-positive { color: #1ed760; }
+    .saldo-negative { color: #e0245e; }
+    .add-form {
+      display: flex; gap: .75rem;
+      flex-wrap: wrap; padding: 1rem 2rem;
+      background: var(--panel); align-items: center;
+    }
+    .add-form input {
+      padding: .5rem; border: 1px solid var(--text-light);
+      border-radius: 4px; background: var(--bg); color: var(--fg);
+      flex: 1 1 200px;
+    }
+    .add-form button {
+      padding: .5rem 1rem; background: var(--accent);
+      border: none; border-radius: 4px; color: white;
+      cursor: pointer;
+    }
+    input[type="checkbox"] {
+      width: 20px; height: 20px;
+      transform: scale(1.3); cursor: pointer;
+    }
+    main { flex: 1; padding: 2rem; }
+    table {
+      width: 100%; border-collapse: collapse;
+      background: var(--panel); border-radius: 6px;
+      overflow: hidden; margin-top: 1rem;
+    }
+    th, td {
+      padding: .75rem 1rem; text-align: left;
+    }
+    th {
+      background: var(--bg); font-weight: 600;
+      border-bottom: 2px solid var(--accent);
+    }
+    tbody tr:nth-child(odd)  { background: var(--bg); }
+    tbody tr:nth-child(even) { background: var(--panel); }
+    .positive { color: #1ed760; }
+    .negative { color: #e0245e; }
+    .paid-toggle-btn {
+      all: unset;
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: var(--accent);
+      padding: .25rem;
+      border-radius: 4px;
+      transition: background .2s;
+    }
+    .paid-toggle-btn:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+    footer {
+      padding: 1rem 2rem; text-align: center;
+      background: var(--panel); color: var(--text-light);
+      font-size: .9rem;
+    }
+  </style>
+  <script>
+    function autoSubmit(sel) {
+      sel.form.submit();
+    }
+    function clearSearch() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      input.form.submit();
+    }
+  </script>
+</head>
+<body>
+
+<header>
+  <h1>FinanzApp Dashboard v{{ version }}</h1>
+  <div>
+    <span class="user">Angemeldet als {{ username }}</span>
+    &nbsp;|&nbsp;
+    <form action="{{ url_for('logout') }}" method="get" style="display:inline">
+      <button type="submit" class="logout">Abmelden</button>
+    </form>
+  </div>
+</header>
+
+<div class="toolbar">
+  <a href="{{ url_for('fixkosten') }}" class="nav-btn">Fixkosten</a>
+  <a href="{{ url_for('vorschlaege.index') }}" class="nav-btn">Verwaltung</a>
+
+  <form method="get" action="{{ url_for('dashboard') }}"
+        style="display:flex;gap:.75rem;flex:1;flex-wrap:wrap;align-items:center;">
+    <div class="search-wrapper">
+      <input type="text" id="searchInput" name="q"
+             placeholder="Suche Name/Firma oder Zweck…"
+             value="{{ q|default('') }}">
+      {% if q %}<button type="button" onclick="clearSearch()">×</button>{% endif %}
+    </div>
+
+    <label>
+      Jahr:
+      <select name="year" onchange="autoSubmit(this)">
+        {% set start=(current_year|int) %}
+        {% for y in range(start, start+5) %}
+          <option value="{{ y }}" {% if year==y|string %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+        <option value="Archiv" {% if year=='Archiv' %}selected{% endif %}>Archiv 2020–2024</option>
+      </select>
+    </label>
+
+    <label>
+      Monat:
+      <select name="month" onchange="autoSubmit(this)">
+        <option value="0" {% if month=='0' %}selected{% endif %}>Alle Monate</option>
+        {% for num,name in [('1','Jan'),('2','Feb'),('3','Mär'),('4','Apr'),
+                            ('5','Mai'),('6','Jun'),('7','Jul'),('8','Aug'),
+                            ('9','Sep'),('10','Okt'),('11','Nov'),('12','Dez')] %}
+          <option value="{{ num }}" {% if month==num %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
+
+{% if saldo is defined %}
+  <div class="saldo-box">
+    <div>Saldo:
+      <span class="{{ 'saldo-positive' if saldo >= 0 else 'saldo-negative' }}">
+        {{ "%.2f"|format(saldo) }} €</span>
+    </div>
+    <div>Offene Fixkosten:
+      <span class="saldo-negative">{{ "%.2f"|format(offen) }} €</span>
+    </div>
+  </div>
+{% endif %}
+
+<form method="post" action="{{ url_for('add_entry') }}" class="add-form">
+  <input type="text" name="description" placeholder="Name/Firma" required>
+  <input type="text" name="usage" placeholder="Verwendungszweck" required>
+  <input type="text" name="amount" placeholder="Betrag (€)" required>
+  <input type="text" name="duration" placeholder="Dauer (Monate)">
+  <button type="submit">Hinzufügen</button>
+</form>
+
+<form method="post" action="{{ url_for('delete_entries') }}">
+  <main>
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox"
+                     onclick="document.querySelectorAll('.chk').forEach(cb=>cb.checked=this.checked)"></th>
+          <th>Datum</th><th>Beschreibung</th><th>Verwendungszweck</th><th>Betrag</th><th>Bezahlt</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr>
+          <td><input type="checkbox" name="delete_ids" value="{{ t.id }}" class="chk"></td>
+          <td>{{ t.date[8:10] }}.{{ t.date[5:7] }}.{{ t.date[:4] }}</td>
+          <td>{{ t.description }}</td>
+          <td>{{ t.usage }}</td>
+          <td class="{{ 'positive' if t.amount>=0 else 'negative' }}">
+            {{ "%.2f"|format(t.amount) }} €
+          </td>
+          <td>
+            {% if t.recurring_id and t.amount < 0 %}
+              <button class="paid-toggle-btn"
+                      onclick="togglePaid({{ t.id }}, {{ 1 if t.paid else 0 }})">
+                {{ '✓' if t.paid else '✗' }}
+              </button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center;padding:2rem;">
+            Keine Transaktionen gefunden.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="margin-top:1rem;">
+      <button type="submit"
+              style="padding:.5rem 1rem;background:#e0245e;color:#fff;border:none;border-radius:4px;cursor:pointer;">
+        Ausgewählte löschen
+      </button>
+    </div>
+  </main>
+</form>
+
+<footer>
+  © 2025 xKAISEN – Version {{ version }}
+</footer>
+
+<script>
+function togglePaid(entryId, currentPaid) {
+  fetch(`/api/transaction/${entryId}/toggle_paid`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: {{ user_id }},
+      paid: currentPaid ? 0 : 1
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      location.reload();
+    } else {
+      alert("Fehler beim Umschalten: " + data.error);
+    }
+  })
+  .catch(err => alert("Verbindungsfehler: " + err));
+}
+</script>
+
+</body>
+</html>

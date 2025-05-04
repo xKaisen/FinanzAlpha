@@ -1,0 +1,191 @@
+:root {
+  --bg-light: #fafafa;
+  --bg-dark: #1e1e1e;
+  --card-light: #ffffff;
+  --card-dark: #2b2b2b;
+  --text-light: #222222;
+  --text-dark: #eeeeee;
+  --input-light: #f0f0f0;
+  --input-dark: #3a3a3a;
+  --border-light: #ddd;
+  --border-dark: #444;
+  --accent: #1db954;
+  --error: #e74c3c;
+  --success: #2ecc71;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-light);
+  color: var(--text-light);
+  transition: background-color .3s, color .3s;
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body {
+    background-color: var(--bg-dark);
+    color: var(--text-dark);
+  }
+}
+
+.container, .login-container {
+  max-width: 360px;
+  margin: 80px auto;
+  padding: 24px;
+  background: var(--card-light);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: background .3s, box-shadow .3s;
+}
+
+@media (prefers-color-scheme: dark) {
+  .container, .login-container {
+    background: var(--card-dark);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  }
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
+  font-size: 1.8rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 16px;
+  font-size: .95rem;
+}
+
+label input,
+label select {
+  width: 100%;
+  padding: 10px;
+  margin-top: 4px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: var(--input-light);
+  color: inherit;
+  transition: background .3s, border .3s;
+}
+
+@media (prefers-color-scheme: dark) {
+  label input,
+  label select {
+    background: var(--input-dark);
+    border: 1px solid var(--border-dark);
+  }
+}
+
+button, .btn {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity .2s;
+}
+
+button:hover, .btn:hover {
+  opacity: .9;
+}
+
+.flash-messages {
+  margin-bottom: 16px;
+}
+
+.flash {
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: .95rem;
+}
+
+.flash.error {
+  background: var(--error);
+  color: #fff;
+}
+
+.flash.success {
+  background: var(--success);
+  color: #fff;
+}
+
+/* Dashboard-spezifisch */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar label, .toolbar select, .toolbar button {
+  margin-right: 12px;
+  margin-bottom: 8px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.data-table th, .data-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+  transition: background .3s;
+}
+
+@media (prefers-color-scheme: dark) {
+  .data-table th, .data-table td {
+    border-bottom: 1px solid var(--border-dark);
+  }
+}
+
+.data-table th {
+  background: var(--card-light);
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .data-table th {
+    background: var(--card-dark);
+  }
+}
+
+.data-table tr.empty td {
+  text-align: center;
+  font-style: italic;
+  color: #888;
+}
+
+.positive {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.negative {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 24px;
+  font-size: .8rem;
+  color: #777;
+}
+
+@media (prefers-color-scheme: dark) {
+  .footer {
+    color: #bbb;
+  }
+}

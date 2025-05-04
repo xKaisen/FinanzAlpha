@@ -1,0 +1,83 @@
+{
+    "0.1.2": {
+        "features": [
+            "✨ Changelog Button – Zeigt im Login Menu jetzt den aktuellen Changelog.",
+            "✨ Changelog PopUp – Nach einem Update kommt ein Changelog Pop-up für die neusten Updates."
+        ],
+        "bugfixes": [
+            "🐛 Kritischer Fix – App startet nach Installation.",
+            "🐞 Fix für Datenbank – Registrierung wird gespeichert und Login nach App-Neustart wieder möglich. Ebenso werden jetzt die Einträge gespeichert und nicht mehr gelöscht."
+        ],
+        "known_issues": [
+            "⚠️ Automatische Anmeldung – Login-Daten werden aktuell nicht korrekt gespeichert, automatische Anmeldung funktioniert nicht zuverlässig."
+        ],
+        "coming_soon": []
+    },
+    "0.1.3": {
+        "features": [],
+        "bugfixes": [
+            "✅ Anmeldedaten merken funktioniert wieder."
+        ],
+        "known_issues": [],
+        "coming_soon": []
+    },
+    "0.1.4": {
+        "features": [
+            "🔔 Update-Warnung, wenn ein neues Update verfügbar ist",
+            "🛠️ Manueller Updater mit Update-Checker"
+        ],
+        "bugfixes": [
+            "⚠️ AUTO UPDATER DEAKTIVIERT (UPDATE LOOP) ⚠️",
+            "🚀 Kleines Performance Update",
+            "✅ Logout geht wieder ohne App Crash",
+            "✅ Changelog Fenster Size bei Changelog auswahl angepasst"
+        ],
+        "known_issues": [],
+        "coming_soon": []
+    },
+    "0.1.4a": {
+        "features": [],
+        "bugfixes": [
+            "⚠️ AUTO UPDATER bleibt DEAKTIVIERT ⚠️",
+            "🚀 Kleinere Fixes",
+            "✅ Manueller Updater – Zum manuellen Prüfen/Installieren von Updates",
+            "✅ AutoUpdate Checker – Dieser benachrichtigt, wenn ein Update verfügbar ist"
+        ],
+        "known_issues": [],
+        "coming_soon": []
+    },
+    "0.1.4b": {
+        "features": [
+            "❗❗ WICHTIGE INFO ❗❗",
+            "⚠️ Kein Installer mehr – Only Base EXE ⚠️",
+            "⚠️ Neue Update-Art im Testing für bessere Updates ⚠️"
+        ],
+        "bugfixes": [
+            "🚀 Kleinere Fixes"
+        ],
+        "known_issues": [],
+        "coming_soon": []
+    },
+    "0.1.5": {
+        "features": [
+		"📌 Neue Update-Art Eingebaut📌",
+		"Exe Sollte nun Erfolgreich überschreiben werden um Verdopplung zu vermeiden"
+		],
+        "bugfixes": [
+            "🚀 Light Mode Fix"
+        ],
+        "known_issues": [],
+        "coming_soon": []
+	},
+    "0.1.9": {
+        "features": [ 
+		" ☁️ Could Sync Button Implementiert Noch nicht Nutzbar☁️ "
+		],
+        "bugfixes": [],
+        "known_issues": [],
+        "coming_soon": [
+		    "📌 WEB MIGRATION + WEB APP📌",
+            "☁️ Cloud-Sync",
+            "📱 Smartphone/Tablet Support"]
+    }
+}

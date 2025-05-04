@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FinanzApp – Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 flex items-center justify-center h-screen">
+  <div class="bg-white shadow-xl rounded-xl p-8 w-full max-w-md">
+    <h1 class="text-3xl font-bold text-center mb-6">FinanzApp</h1>
+
+    {% if error %}
+      <div class="bg-red-100 text-red-800 p-3 rounded mb-4">{{ error }}</div>
+    {% endif %}
+
+    <form action="{{ url_for('login') }}" method="post" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="username">Benutzername</label>
+        <input id="username" name="username" type="text" required
+               class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" for="password">Passwort</label>
+        <input id="password" name="password" type="password" required
+               class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+      </div>
+      <button type="submit"
+              class="w-full bg-indigo-600 text-white py-2 rounded-md font-semibold hover:bg-indigo-700 transition">
+        Einloggen
+      </button>
+    </form>
+
+    <p class="mt-6 text-center text-sm">
+      Noch keinen Account?
+      <a href="{{ url_for('register') }}" class="text-indigo-600 hover:underline">Registrieren</a>
+    </p>
+  </div>
+</body>
+</html>
