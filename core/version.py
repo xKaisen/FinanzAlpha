@@ -3,7 +3,7 @@ import json
 import os
 
 # Aktuelle Version eurer App; hier anpassen
-__version__ = "0.6.0"
+__version__ = "1.0.1"
 
 # Pfad zur Datei, in der die letzte angezeigte Version gespeichert wird
 LAST_VERSION_FILE = os.environ.get("LAST_VERSION_FILE", "last_version.json")
