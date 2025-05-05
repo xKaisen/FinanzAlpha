@@ -146,14 +146,14 @@
         </tr>
       </thead>
       <tbody>
-        {% for id, desc, usage, amt, dur, start in fixes %}
+        {% for fix in fixes %}
         <tr>
-          <td><input type="checkbox" name="delete_id" value="{{ id }}" class="chk"></td>
-          <td>{{ desc }}</td>
-          <td>{{ usage }}</td>
-          <td>{{ "%.2f"|format(amt) }} €</td>
-          <td>{{ dur }}</td>
-          <td>{{ start }}</td>
+          <td><input type="checkbox" name="delete_id" value="{{ fix.id }}" class="chk"></td>
+          <td>{{ fix.description }}</td>
+          <td>{{ fix.usage }}</td>
+          <td>{{ "%.2f"|format(fix.amount) }} €</td>
+          <td>{{ fix.duration }}</td>
+          <td>{{ fix.start_date }}</td>
         </tr>
         {% else %}
         <tr>

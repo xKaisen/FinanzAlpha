@@ -45,7 +45,7 @@ CREDENTIALS_FILE: str = os.path.join(CONFIG_DIR, "credentials.json")   # Zugangs
 LAST_VERSION_FILE: str = os.path.join(CONFIG_DIR, "last_version.json")  # Zuletzt angezeigte App‑Version
 
 # Eingebettete Ressourcen (liegen beim Build im gleichen Package‑Ordner)
-CHANGELOG_FILE: Path = resource_path("changelog.json")  # globaler Changelog aller Versionen
+CHANGELOG_FILE: Path = resource_path("ui/changelog.json")  # globaler Changelog aller Versionen
 
 # Monatsnamen für UI / Reports
 MONTHS = [

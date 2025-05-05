@@ -110,11 +110,8 @@
 
 <!-- Toolbar -->
 <div class="toolbar">
-  <!-- Löschformular -->
-  <form id="delete-form" method="post" action="{{ url_for('vorschlaege.index') }}">
-    <input type="hidden" name="delete_sugg" value="1">
-    <button type="button" class="nav-btn delete-btn" onclick="deleteSelected()">Ausgewählte löschen</button>
-  </form>
+  <!-- Löschen -->
+  <button type="button" class="nav-btn delete-btn" onclick="deleteSelected()">Ausgewählte löschen</button>
 
   <!-- Zurück zum Dashboard -->
   <a href="{{ url_for('dashboard') }}" class="nav-btn">Dashboard</a>
@@ -143,14 +140,14 @@
           <th>Vorschlag</th>
         </tr>
       </thead>
-      <tbody id="suggestion-table-body">
-        {% for suggestion in vorschlaege %}
+      <tbody>
+        {% for suggestion_type, text in vorschlaege %}
         <tr>
           <td>
-            <input type="checkbox" name="delete_item" value="{{ suggestion.suggestion_type }}|{{ suggestion.text }}" class="chk">
+            <input type="checkbox" name="delete_item" value="{{ suggestion_type }}|{{ text }}" class="chk">
           </td>
-          <td>{{ 'Name/Firma' if suggestion.suggestion_type == 'description' else 'Verwendungszweck' }}</td>
-          <td>{{ suggestion.text }}</td>
+          <td>{{ 'Name/Firma' if suggestion_type == 'description' else 'Verwendungszweck' }}</td>
+          <td>{{ text }}</td>
         </tr>
         {% else %}
         <tr>
@@ -170,14 +167,13 @@
 
 <script>
   function toggleAllCheckboxes(source) {
-    const checkboxes = document.querySelectorAll('.chk');
-    checkboxes.forEach(cb => cb.checked = source.checked);
+    document.querySelectorAll('.chk').forEach(cb => cb.checked = source.checked);
   }
 
   function deleteSelected() {
     const form = document.getElementById('table-form');
-    const checkboxes = document.querySelectorAll('.chk:checked');
-    if (checkboxes.length > 0) {
+    const selected = document.querySelectorAll('.chk:checked');
+    if (selected.length > 0) {
       form.submit();
     } else {
       alert('Bitte wählen Sie mindestens einen Vorschlag zum Löschen aus.');

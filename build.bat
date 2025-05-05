@@ -2,10 +2,12 @@
 setlocal
 
 REM === VERSION DEFINIEREN ===
-set VERSION=0.1.5
+set VERSION=1.0.1
 set OUTDIR=dist\FinanzApp_%VERSION%
 set ICON=finanz_icon.ico
 set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+
+REM Der Name, den PyInstaller erzeugt:
 set EXE_NAME=FinanzAlpha.exe
 set EXE_PATH=%OUTDIR%\%EXE_NAME%
 
@@ -13,8 +15,10 @@ echo ======================================
 echo 🚧 Baue FinanzAlpha v%VERSION%...
 echo ======================================
 
-REM === Ordner anlegen ===
-mkdir %OUTDIR%
+REM === Dist-Ordner anlegen ===
+if not exist "%OUTDIR%" (
+    mkdir "%OUTDIR%"
+)
 
 REM === PyInstaller Build ===
 pyinstaller ^
@@ -22,27 +26,30 @@ pyinstaller ^
   --onefile ^
   --noconsole ^
   --icon=%ICON% ^
-  --add-data "changelog.json;." ^
-  --add-data "finanz_app.db;." ^
   --hidden-import bcrypt ^
   --collect-all PySide6 ^
-  main.py
+  start_offline.py
 
-IF %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% neq 0 (
     echo ❌ Build fehlgeschlagen.
     pause
     exit /b %ERRORLEVEL%
 )
 
 REM === EXE verschieben ===
-move dist\%EXE_NAME% %EXE_PATH%
+if exist "dist\%EXE_NAME%" (
+    move /Y "dist\%EXE_NAME%" "%EXE_PATH%"
+) else (
+    echo ❌ Keine EXE gefunden in dist\%EXE_NAME%.
+    pause
+    exit /b 1
+)
 
 REM === Signieren, falls signtool vorhanden ===
-IF EXIST %SIGNTOOL% (
+if exist %SIGNTOOL% (
     echo ======================================
     echo 🔐 Signiere .exe mit signtool
     echo ======================================
-
     %SIGNTOOL% sign ^
         /fd SHA256 ^
         /a ^
@@ -50,13 +57,12 @@ IF EXIST %SIGNTOOL% (
         /tr http://timestamp.digicert.com ^
         /v ^
         "%EXE_PATH%"
-
-    IF %ERRORLEVEL% EQU 0 (
+    if %ERRORLEVEL% equ 0 (
         echo ✅ Signierung erfolgreich abgeschlossen.
-    ) ELSE (
+    ) else (
         echo ⚠️  Signierung fehlgeschlagen – .exe bleibt unsigniert.
     )
-) ELSE (
+) else (
     echo ⚠️  signtool.exe nicht gefunden – überspringe Signierung.
 )
 

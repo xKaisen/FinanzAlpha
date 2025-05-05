@@ -211,7 +211,6 @@
   <input type="text" name="description" placeholder="Name/Firma" required>
   <input type="text" name="usage" placeholder="Verwendungszweck" required>
   <input type="text" name="amount" placeholder="Betrag (€)" required>
-  <input type="text" name="duration" placeholder="Dauer (Monate)">
   <button type="submit">Hinzufügen</button>
 </form>
 
@@ -229,7 +228,7 @@
         {% for t in transactions %}
         <tr>
           <td><input type="checkbox" name="delete_ids" value="{{ t.id }}" class="chk"></td>
-          <td>{{ t.date[8:10] }}.{{ t.date[5:7] }}.{{ t.date[:4] }}</td>
+          <td>{{ t.date.strftime('%d.%m.%Y') }}</td>
           <td>{{ t.description }}</td>
           <td>{{ t.usage }}</td>
           <td class="{{ 'positive' if t.amount>=0 else 'negative' }}">
@@ -268,7 +267,7 @@
 
 <script>
 function togglePaid(entryId, currentPaid) {
-  fetch(`/api/transaction/${entryId}/toggle_paid`, {
+  fetch(`/toggle_paid/${entryId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

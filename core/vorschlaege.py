@@ -5,7 +5,6 @@ from datetime import date
 
 bp = Blueprint('vorschlaege', __name__, url_prefix='/vorschlaege')
 
-
 @bp.route('/', methods=['GET', 'POST'])
 def index():
     if not session.get('user_id'):
@@ -16,21 +15,23 @@ def index():
     cur = conn.cursor()
 
     # Automatisch Vorschläge aus Transaktionen ergänzen
-    cur.execute("SELECT DISTINCT description FROM transactions WHERE user_id = ?", (user_id,))
+    cur.execute("SELECT DISTINCT description FROM transactions WHERE user_id = %s", (user_id,))
     for (desc,) in cur.fetchall():
         if desc:
-            cur.execute(
-                "INSERT OR IGNORE INTO suggestions (user_id, suggestion_type, text) VALUES (?, 'description', ?)",
-                (user_id, desc)
-            )
+            cur.execute("""
+                INSERT INTO suggestions (user_id, suggestion_type, text)
+                VALUES (%s, 'description', %s)
+                ON CONFLICT (user_id, suggestion_type, text) DO NOTHING
+            """, (user_id, desc))
 
-    cur.execute("SELECT DISTINCT usage FROM transactions WHERE user_id = ?", (user_id,))
+    cur.execute("SELECT DISTINCT usage FROM transactions WHERE user_id = %s", (user_id,))
     for (usage,) in cur.fetchall():
         if usage:
-            cur.execute(
-                "INSERT OR IGNORE INTO suggestions (user_id, suggestion_type, text) VALUES (?, 'usage', ?)",
-                (user_id, usage)
-            )
+            cur.execute("""
+                INSERT INTO suggestions (user_id, suggestion_type, text)
+                VALUES (%s, 'usage', %s)
+                ON CONFLICT (user_id, suggestion_type, text) DO NOTHING
+            """, (user_id, usage))
 
     conn.commit()
 
@@ -43,7 +44,7 @@ def index():
                 try:
                     typ, txt = item.split('|', 1)
                     cur.execute(
-                        "DELETE FROM suggestions WHERE user_id = ? AND suggestion_type = ? AND text = ?",
+                        "DELETE FROM suggestions WHERE user_id = %s AND suggestion_type = %s AND text = %s",
                         (user_id, typ, txt)
                     )
                     deleted += 1
@@ -61,10 +62,11 @@ def index():
         txt = request.form.get('text', '').strip()
 
         if typ in ('description', 'usage') and txt:
-            cur.execute(
-                "INSERT OR IGNORE INTO suggestions (user_id, suggestion_type, text) VALUES (?, ?, ?)",
-                (user_id, typ, txt)
-            )
+            cur.execute("""
+                INSERT INTO suggestions (user_id, suggestion_type, text)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, suggestion_type, text) DO NOTHING
+            """, (user_id, typ, txt))
             conn.commit()
             flash("Vorschlag hinzugefügt.", 'success')
         else:
@@ -75,14 +77,14 @@ def index():
     cur.execute("""
         SELECT suggestion_type, text
         FROM suggestions
-        WHERE user_id = ?
+        WHERE user_id = %s
         ORDER BY suggestion_type, text
     """, (user_id,))
     vorschlaege = cur.fetchall()
     conn.close()
 
     return render_template(
-        'vorschlaege.html',  # <== Hier wird deine HTML-Datei geladen
+        'vorschlaege.html',
         vorschlaege=vorschlaege,
         username=session.get('username'),
         version=__version__

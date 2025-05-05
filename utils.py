@@ -1,10 +1,9 @@
-import re
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget
-from constants import resource_path  # zentrale Pfadfunktion verwenden
-# utils.py (Ergänzungen)
-import re
+# utils.py
+from typing import Tuple
 from decimal import Decimal
+import re
+from datetime import date
+
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import QWidget
 from constants import resource_path
@@ -16,7 +15,7 @@ def set_unified_font(widget: QWidget, pt_size: int = 13):
     for child in widget.findChildren(QWidget):
         child.setFont(font)
 
-def check_password(password: str) -> (bool, str):
+def check_password(password: str) -> Tuple[bool, str]:
     if len(password) < 8:
         return False, "Mindestens 8 Zeichen."
     if re.search(r"\s", password):
@@ -31,8 +30,21 @@ def check_password(password: str) -> (bool, str):
         return False, "Mindestens ein Sonderzeichen."
     return True, ""
 
-def format_euro(value: Decimal) -> str:
-    return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+def format_euro(value) -> str:
+    try:
+        value = Decimal(value)
+        return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "Ungültiger Betrag"
+
+def parse_decimal(text: str) -> Decimal | None:
+    try:
+        return Decimal(text.replace(",", ".").strip())
+    except Exception:
+        return None
+
+def extract_year_month(d: date) -> Tuple[int, int]:
+    return d.year, d.month
 
 def saldo_color(value: Decimal) -> str:
     return "#32CD32" if value >= 0 else "#FF0000"

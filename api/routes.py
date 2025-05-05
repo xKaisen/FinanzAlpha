@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from core.db import get_db_connection
 from datetime import datetime
-import sqlite3
 
 api = Blueprint("api", __name__)
 
@@ -38,24 +37,24 @@ def get_transactions():
     imonth = int(month)
 
     # Bedingungen bauen
-    conditions = ["user_id = ?"]
+    conditions = ["user_id = %s"]  # Hier %s statt ?
     params     = [user_id]
 
     # Jahr/Archiv
     if year.lower() == "archiv":
-        conditions.append("strftime('%Y', date) BETWEEN '2020' AND '2024'")
+        conditions.append("to_char(date, 'YYYY') BETWEEN '2020' AND '2024'")  # PostgreSQL-Syntax
     else:
         # validiere Jahr
         try:
             datetime(int(year), 1, 1)
         except ValueError:
             return error_response("Invalid year format", 400)
-        conditions.append("strftime('%Y', date) = ?")
+        conditions.append("to_char(date, 'YYYY') = %s")  # PostgreSQL-Syntax
         params.append(year)
 
     # Monat, nur wenn 1–12
     if 1 <= imonth <= 12:
-        conditions.append("strftime('%m', date) = ?")
+        conditions.append("to_char(date, 'MM') = %s")  # PostgreSQL-Syntax
         params.append(f"{imonth:02d}")
 
     query = f"""
@@ -67,9 +66,15 @@ def get_transactions():
 
     try:
         with get_db_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(query, params).fetchall()
-        return jsonify([dict(r) for r in rows])
+            cur = conn.cursor()
+            cur.execute(query, params)
+            # Manuelles Abrufen der Spaltennamen für Dict-Konvertierung
+            colnames = [desc[0] for desc in cur.description]
+            rows = cur.fetchall()
+            result = []
+            for row in rows:
+                result.append(dict(zip(colnames, row)))
+            return jsonify(result)
     except Exception as e:
         return error_response(f"Server error: {e}", 500)
 
@@ -100,8 +105,9 @@ def add_transaction():
             cur.execute("""
                 INSERT INTO transactions
                   (user_id, date, description, "usage", amount, paid)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (  # PostgreSQL unterstützt RETURNING
                 data["user_id"],
                 data["date"],
                 data["description"],
@@ -109,8 +115,9 @@ def add_transaction():
                 amount,
                 data.get("paid", 1)
             ))
+            # ID direkt aus dem RETURNING-Statement abrufen
+            new_id = cur.fetchone()[0]
             conn.commit()
-            new_id = cur.lastrowid
         return jsonify({"success": True, "id": new_id, "message": "Transaction added"}), 201
 
     except Exception as e:
@@ -128,8 +135,9 @@ def delete_transaction(tid):
             cur = conn.cursor()
             cur.execute("""
               DELETE FROM transactions
-              WHERE id = ? AND user_id = ?
+              WHERE id = %s AND user_id = %s
             """, (tid, data["user_id"]))
+            # Anzahl der betroffenen Zeilen überprüfen
             if cur.rowcount == 0:
                 return error_response("Transaction not found or access denied", 404)
             conn.commit()
@@ -151,14 +159,14 @@ def toggle_paid_status(tid):
                 cur.execute("""
                   UPDATE transactions
                   SET paid = NOT paid
-                  WHERE id = ? AND user_id = ?
+                  WHERE id = %s AND user_id = %s
                 """, (tid, data["user_id"]))
             else:
                 paid_int = int(bool(data["paid"]))
                 cur.execute("""
                   UPDATE transactions
-                  SET paid = ?
-                  WHERE id = ? AND user_id = ?
+                  SET paid = %s
+                  WHERE id = %s AND user_id = %s
                 """, (paid_int, tid, data["user_id"]))
 
             if cur.rowcount == 0:

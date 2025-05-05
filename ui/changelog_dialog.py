@@ -1,127 +1,236 @@
+# ui/changelog_dialog.py
 import sys
-import os
 import json
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QDialog, QLabel, QPushButton, QVBoxLayout,
-    QHBoxLayout, QSpacerItem, QSizePolicy, QTextEdit
+    QDialog, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QMessageBox,
+    QScrollArea, QLabel, QFrame
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QPalette
+from PySide6.QtGui import QPainter, QPaintEvent, QPalette, QFont
 
-from core.version import __version__  # Falls du das nicht brauchst, einfach entfernen
 
-def get_changelog_path():
-    base = Path(getattr(sys, "_MEIPASS", os.getcwd()))
-    return (base / "ui" / "changelog.json") if (base / "ui" / "changelog.json").exists() else (base / "changelog.json")
+def resource_path(rel_path: str) -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "ui" / rel_path
+    return Path(__file__).parent / rel_path
+
 
 class ChangelogDialog(QDialog):
     def __init__(self, version: str, parent=None):
         super().__init__(parent)
-
-        # Dialog-Eigenschaften
         self.setWindowTitle(f"Changelog – v{version}")
-        self.setFixedSize(600, 500)
+        self.setFixedSize(620, 540)
 
-        # Basis-Schrift
-        base_font = QFont()
-        base_font.setPointSize(12)
-        self.setFont(base_font)
+        # Hauptlayout
+        main = QVBoxLayout(self)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
 
-        # Layout
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        # Container als "Karte"
+        container = QWidget(self)
+        container.setObjectName("card")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(18)
 
-        # Titel
-        title = QLabel(f"<center><b>Das ist neu in Version {version}</b></center>")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 16pt;")
-        layout.addWidget(title)
+        # Scroll Area mit modernem Styling
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.NoFrame)
+        scroll_area.setObjectName("scrollArea")
 
-        # Textbereich
-        self.view = QTextEdit()
-        self.view.setReadOnly(True)
-        self.set_textedit_style()
-        layout.addWidget(self.view, stretch=1)
+        # Content Widget
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(10)
 
-        # Spacer
-        layout.addSpacerItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        # Changelog-Inhalt hinzufügen
+        self._add_changelog_content(content_layout, version)
 
-        # Weiter-Button
-        btn = QPushButton("Weiter")
-        btn.setFixedSize(500, 40)
-        btn.setStyleSheet(
-            "QPushButton {"
-            "font-size: 14pt;"
-            "background-color: #3a73ff;"
-            "color: white;"
-            "border-radius: 6px;"
-            "padding: 8px;"
-            "}"
-            "QPushButton:hover { background-color: #5a8fff; }"
-            "QPushButton:pressed { background-color: #2a5fff; }"
-        )
+        # Widget in ScrollArea setzen
+        scroll_area.setWidget(content_widget)
+        layout.addWidget(scroll_area, 1)
+
+        # Close button
+        btn = QPushButton("Schließen", self)
+        btn.setFixedHeight(40)
+        btn.setFixedWidth(180)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1ed760;
+                color: white;
+                border-radius: 6px;
+                font-size: 14pt;
+                padding: 8px 16px;
+            }
+            QPushButton:hover { 
+                background-color: #1ed760CC;
+            }
+            QPushButton:pressed { 
+                background-color: #1ed76099;
+            }
+        """)
         btn.clicked.connect(self.accept)
+
         hl = QHBoxLayout()
         hl.addStretch()
         hl.addWidget(btn)
         hl.addStretch()
         layout.addLayout(hl)
 
-        # Inhalte laden
-        self.load_changelog(version)
+        main.addWidget(container)
 
-    def set_textedit_style(self):
-        # Erkennung von Dark Mode anhand Fensterfarbe
-        bg_color = self.palette().color(QPalette.Window)
-        is_dark = bg_color.value() < 128  # 0–255, Helligkeit
+        # Immer dunkles Design verwenden
+        self._apply_dark_theme()
 
-        if is_dark:
-            self.view.setStyleSheet(
-                "font-size: 12pt;"
-                "background-color: #2b2b2b;"
-                "color: #f0f0f0;"
-                "padding: 10px;"
-                "border: 1px solid #555;"
-            )
-        else:
-            self.view.setStyleSheet(
-                "font-size: 12pt;"
-                "background-color: #fafafa;"
-                "color: #000000;"
-                "padding: 10px;"
-                "border: 1px solid #ddd;"
-            )
-
-    def load_changelog(self, version: str):
-        path = get_changelog_path()
+    def _add_changelog_content(self, layout, version):
         try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
+            data = json.loads(resource_path("changelog.json").read_text(encoding="utf-8"))
+            ver = data.get(version, {})
 
-            version_data = data.get(version)
-            if not version_data:
-                self.view.setPlainText("Keine Einträge für diese Version.")
-                return
+            # Titel
+            title = QLabel(f"Version {version}")
+            title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+            layout.addWidget(title)
 
-            sections = [
+            # Trennlinie unter dem Titel
+            separator = QFrame()
+            separator.setFrameShape(QFrame.HLine)
+            separator.setFrameShadow(QFrame.Sunken)
+            separator.setStyleSheet("background-color: #555555;")
+            layout.addWidget(separator)
+
+            # Sektionen
+            for key, heading in [
                 ("features", "✨ Neue Features"),
                 ("bugfixes", "🐛 Bugfixes"),
                 ("known_issues", "⚠️ Bekannte Probleme"),
-                ("coming_soon", "🚧🔜 COMING SOON 🔜🚧")
-            ]
+                ("coming_soon", "🚧🔜 COMING SOON 🔜🚧"),
+            ]:
+                items = ver.get(key)
+                if items:
+                    # Sektions-Überschrift
+                    section_title = QLabel(heading)
+                    section_title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+                    layout.addWidget(section_title)
 
-            lines = []
-            for key, title in sections:
-                entries = version_data.get(key)
-                if entries:
-                    lines.append(f"<b>{title}</b>")
-                    lines.append("<hr>")
-                    for e in entries:
-                        lines.append(f"• {e}")
-                    lines.append("<br>")
+                    # Einträge
+                    for item in items:
+                        entry = QLabel(f"• {item}")
+                        entry.setWordWrap(True)
+                        entry.setTextFormat(Qt.RichText)
+                        entry.setFont(QFont("Segoe UI", 12))
+                        layout.addWidget(entry)
 
-            self.view.setHtml("<br>".join(lines))
+                    # Abstand nach jeder Sektion
+                    spacer = QWidget()
+                    spacer.setFixedHeight(15)
+                    layout.addWidget(spacer)
+
+            # Wenn keine Einträge vorhanden sind
+            if not ver:
+                no_entries = QLabel("Keine Einträge.")
+                no_entries.setFont(QFont("Segoe UI", 12))
+                layout.addWidget(no_entries)
+
+            # Fügt Platz am Ende hinzu damit alles gut lesbar ist
+            layout.addStretch()
+
         except Exception as e:
-            self.view.setPlainText(f"Fehler beim Laden:\n{e}")
+            error_label = QLabel(f"Fehler beim Laden: {str(e)}")
+            error_label.setWordWrap(True)
+            layout.addWidget(error_label)
+
+    def paintEvent(self, event: QPaintEvent):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.TextAntialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        super().paintEvent(event)
+
+    def _apply_dark_theme(self):
+        # Immer dunkles Design wie im Login-Fenster
+        bg_color = "#2b2b2b"  # Login-Hintergrund
+        card_color = "#2b2b2b"
+        text_color = "#f0f0f0"
+        scroll_bg = "#3b3b3b"
+        scroll_handle = "#4d4d4d"
+        scroll_handle_hover = "#1ed760"  # Grün im Hover-Zustand
+
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {bg_color};
+            }}
+            QWidget#card {{ 
+                background-color: {card_color}; 
+                border-radius: 8px; 
+            }}
+            QScrollArea#scrollArea {{ 
+                background-color: {card_color}; 
+                border: none;
+            }}
+            QWidget {{ 
+                background-color: {card_color}; 
+                color: {text_color};
+            }}
+            QLabel {{
+                color: {text_color};
+            }}
+
+            /* Scrollbar-Styling */
+            QScrollBar:vertical {{
+                background: {scroll_bg};
+                width: 12px;
+                margin: 0px;
+                border-radius: 6px;
+            }}
+
+            QScrollBar::handle:vertical {{
+                background: {scroll_handle};
+                min-height: 30px;
+                border-radius: 6px;
+            }}
+
+            QScrollBar::handle:vertical:hover {{
+                background: {scroll_handle_hover};
+            }}
+
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
+
+            /* Horizontalen Scrollbalken auch stylen */
+            QScrollBar:horizontal {{
+                background: {scroll_bg};
+                height: 12px;
+                margin: 0px;
+                border-radius: 6px;
+            }}
+
+            QScrollBar::handle:horizontal {{
+                background: {scroll_handle};
+                min-width: 30px;
+                border-radius: 6px;
+            }}
+
+            QScrollBar::handle:horizontal:hover {{
+                background: {scroll_handle_hover};
+            }}
+
+            QScrollBar::add-line:horizontal,
+            QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+
+            QScrollBar::add-page:horizontal,
+            QScrollBar::sub-page:horizontal {{
+                background: none;
+            }}
+        """)

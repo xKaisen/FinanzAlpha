@@ -60,24 +60,38 @@
     },
     "0.1.5": {
         "features": [
-		"📌 Neue Update-Art Eingebaut📌",
-		"Exe Sollte nun Erfolgreich überschreiben werden um Verdopplung zu vermeiden"
-		],
+            "📌 Neue Update-Art Eingebaut📌",
+            "Exe Sollte nun Erfolgreich überschreiben werden um Verdopplung zu vermeiden"
+        ],
         "bugfixes": [
             "🚀 Light Mode Fix"
         ],
         "known_issues": [],
         "coming_soon": []
-	},
-    "0.1.9": {
-        "features": [ 
-		" ☁️ Could Sync Button Implementiert Noch nicht Nutzbar☁️ "
-		],
+    },
+    "0.4.0": {
+        "features": [
+			"🚀 BIG UI UPDATE️ 🚀",
+            "Sync Button für Internet Sync mit der Web App",
+            "Name/Firma und Verwendungszwech Verwaltung",
+            "Kleinere Fixes"
+        ],
         "bugfixes": [],
         "known_issues": [],
         "coming_soon": [
-		    "📌 WEB MIGRATION + WEB APP📌",
+            "📌 WEB MIGRATION + WEB APP📌",
             "☁️ Cloud-Sync",
-            "📱 Smartphone/Tablet Support"]
+            "📱 Smartphone/Tablet Support"
+        ]
+    },
+	    "0.6.0": {
+        "features": [
+            " ☁️ Could Sync Button Implementiert☁️"
+        ],
+        "bugfixes": [],
+        "known_issues": [],
+        "coming_soon": [
+            "📱 Smartphone/Tablet Support"
+        ]
     }
 }

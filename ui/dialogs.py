@@ -1,21 +1,18 @@
-# ui/dialogs.py
-
 import os
 from datetime import date, datetime
-
-import bcrypt
 from decimal import Decimal
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QMessageBox, QTableWidget, QTableWidgetItem, QAbstractItemView,
     QDateEdit, QHeaderView, QComboBox, QCompleter
 )
-from PySide6.QtCore import Qt, QStringListModel
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 from core.db import get_db_connection
-from utils import check_password, set_unified_font
-
+from utils import check_password, set_unified_font, extract_year_month
 
 class BaseDialog(QDialog):
     def _with_connection(self, fn, *args, **kwargs):
@@ -31,71 +28,15 @@ class BaseDialog(QDialog):
         finally:
             conn.close()
 
-
-class RegistrationDialog(BaseDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        set_unified_font(self, 13)
-        self.setWindowTitle("Registrierung")
-        self.resize(300, 200)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Benutzername:"))
-        self.username_input = QLineEdit()
-        layout.addWidget(self.username_input)
-
-        layout.addWidget(QLabel("Passwort:"))
-        self.password_input = QLineEdit()
-        self.password_input.setEchoMode(QLineEdit.Password)
-        layout.addWidget(self.password_input)
-
-        hint = QLabel(
-            "Passwort muss mindestens 8 Zeichen lang sein,\n"
-            "je einen Groß- und Kleinbuchstaben,\n"
-            "eine Zahl und ein Sonderzeichen enthalten."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: gray; font-size: 11pt;")
-        layout.addWidget(hint)
-
-        self.register_btn = QPushButton("Registrieren")
-        self.register_btn.clicked.connect(self.register)
-        layout.addWidget(self.register_btn)
-
-    def register(self):
-        user = self.username_input.text().strip()
-        pwd = self.password_input.text()
-        if not user or not pwd:
-            QMessageBox.warning(self, "Fehler", "Bitte alle Felder ausfüllen")
-            return
-        valid, msg = check_password(pwd)
-        if not valid:
-            QMessageBox.warning(self, "Fehler", msg)
-            return
-        pwd_hash = bcrypt.hashpw(pwd.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        try:
-            self._with_connection(lambda cur: cur.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                (user, pwd_hash)
-            ))
-        except Exception as e:
-            QMessageBox.critical(self, "Fehler bei Registrierung",
-                                 f"Name schon vorhanden oder DB-Fehler:\n{e}")
-            return
-
-        QMessageBox.information(self, "Erfolg", "Benutzer angelegt")
-        self.accept()
-
-
 class ManageFixBetrageDialog(BaseDialog):
     def __init__(self, user_id, parent=None):
         super().__init__(parent)
         set_unified_font(self, 15)
-        font = self.font(); font.setStyleStrategy(QFont.PreferAntialias)
+        font = self.font()
+        font.setStyleStrategy(QFont.PreferAntialias)
         self.setFont(font)
         self.user_id = user_id
 
-        # ensure suggestion tables exist
         self._with_connection(lambda cur: cur.execute("""
             CREATE TABLE IF NOT EXISTS fix_suggestions (
                 user_id INTEGER,
@@ -119,7 +60,6 @@ class ManageFixBetrageDialog(BaseDialog):
 
         main_layout = QVBoxLayout(self)
 
-        # recurring entries table
         self.table = QTableWidget(0, 6)
         self.table.setFont(self.font())
         self.table.setHorizontalHeaderLabels([
@@ -131,25 +71,74 @@ class ManageFixBetrageDialog(BaseDialog):
         self.table.setColumnHidden(0, True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)  # Entfernt die Zeilennummerierung
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2e2e2e;
+                alternate-background-color: #333333;
+                border: none;
+                border-radius: 12px;
+                gridline-color: transparent;
+                padding: 10px;
+                selection-background-color: #444444;
+            }
+
+            QHeaderView::section {
+                background-color: #333333;
+                color: white;
+                padding: 12px 8px;
+                border: none;
+                border-bottom: 2px solid #1ed760;
+                font-weight: bold;
+                font-size: 12pt;
+            }
+
+            QHeaderView::section:first {
+                border-top-left-radius: 8px;
+            }
+
+            QHeaderView::section:last {
+                border-top-right-radius: 8px;
+            }
+
+            QTableWidget::item {
+                border-bottom: 1px solid #3a3a3a;
+                padding: 8px;
+                margin: 2px;
+            }
+
+            QTableWidget::item:hover {
+                background-color: #3a3a3a;
+                border-radius: 6px;
+            }
+
+            QTableWidget::item:selected {
+                background-color: #444444;
+                border-radius: 6px;
+            }
+        """)
         main_layout.addWidget(self.table)
 
-        # form inputs
         form_layout = QHBoxLayout()
-        self.beschreibung_input = QComboBox(); self.beschreibung_input.setEditable(True)
+        self.beschreibung_input = QComboBox()
+        self.beschreibung_input.setEditable(True)
         self.beschreibung_input.lineEdit().setPlaceholderText("Name / Firma")
         form_layout.addWidget(self.beschreibung_input, 3)
 
-        self.nutzung_input = QComboBox(); self.nutzung_input.setEditable(True)
+        self.nutzung_input = QComboBox()
+        self.nutzung_input.setEditable(True)
         self.nutzung_input.lineEdit().setPlaceholderText("Verwendungszweck")
         form_layout.addWidget(self.nutzung_input, 3)
 
-        self.betrag_input = QLineEdit(); self.betrag_input.setPlaceholderText("Betrag (€)")
+        self.betrag_input = QLineEdit()
+        self.betrag_input.setPlaceholderText("Betrag (€)")
         form_layout.addWidget(self.betrag_input, 2)
 
-        self.dauer_input = QComboBox(); self.dauer_input.setEditable(True)
-        self.dauer_input.lineEdit().setPlaceholderText("Dauer (M)")
+        self.dauer_input = QComboBox()
+        self.dauer_input.setEditable(True)
         self.dauer_input.addItems([str(i) for i in range(1, 25)])
         self.dauer_input.setCurrentText("")
+        self.dauer_input.lineEdit().setPlaceholderText("Dauer (M)")
         form_layout.addWidget(self.dauer_input, 2)
 
         self.startdatum_input = QDateEdit()
@@ -159,7 +148,6 @@ class ManageFixBetrageDialog(BaseDialog):
 
         main_layout.addLayout(form_layout)
 
-        # buttons
         btn_layout = QHBoxLayout()
         self.edit_mode = False
         self.current_edit_id = None
@@ -168,21 +156,24 @@ class ManageFixBetrageDialog(BaseDialog):
         self.btn_edit.clicked.connect(self.on_edit_clicked)
         btn_layout.addWidget(self.btn_edit)
 
-        btn_add = QPushButton("Hinzufügen"); btn_add.clicked.connect(self.add_fix)
+        btn_add = QPushButton("Hinzufügen")
+        btn_add.clicked.connect(self.add_fix)
         btn_layout.addWidget(btn_add)
 
-        btn_del = QPushButton("Löschen"); btn_del.clicked.connect(self.delete_selected)
+        btn_del = QPushButton("Löschen")
+        btn_del.clicked.connect(self.delete_selected)
         btn_layout.addWidget(btn_del)
 
-        btn_clear = QPushButton("Leeren"); btn_clear.clicked.connect(self._reset_form)
+        btn_clear = QPushButton("Leeren")
+        btn_clear.clicked.connect(self._reset_form)
         btn_layout.addWidget(btn_clear)
 
-        btn_close = QPushButton("Schließen"); btn_close.clicked.connect(self.accept)
+        btn_close = QPushButton("Schließen")
+        btn_close.clicked.connect(self.accept)
         btn_layout.addWidget(btn_close)
 
         main_layout.addLayout(btn_layout)
 
-        # initial load
         self.load_fixes()
         self.setup_autocomplete()
         self.load_suggestions()
@@ -197,6 +188,7 @@ class ManageFixBetrageDialog(BaseDialog):
 
         setup_combo(self.beschreibung_input, self.get_descriptions())
         setup_combo(self.nutzung_input, self.get_usages())
+
     def load_suggestions(self):
         self.beschreibung_input.clear()
         self.beschreibung_input.addItems([""] + self.get_descriptions())
@@ -204,27 +196,27 @@ class ManageFixBetrageDialog(BaseDialog):
         self.nutzung_input.addItems([""] + self.get_usages())
 
     def get_descriptions(self):
-        return self._with_connection(lambda cur: [
-            r[0] for r in cur.execute(
-                "SELECT description FROM fix_suggestions WHERE user_id=? ORDER BY description",
-                (self.user_id,)
-            ).fetchall()
-        ])
+        def run(cur):
+            cur.execute("SELECT description FROM fix_suggestions WHERE user_id=%s ORDER BY description", (self.user_id,))
+            return [r[0] for r in cur.fetchall()]
+        return self._with_connection(run)
 
     def get_usages(self):
-        return self._with_connection(lambda cur: [
-            r[0] for r in cur.execute(
-                "SELECT usage FROM fix_suggestions WHERE user_id=? ORDER BY usage",
-                (self.user_id,)
-            ).fetchall()
-        ])
+        def run(cur):
+            cur.execute("SELECT usage FROM fix_suggestions WHERE user_id=%s ORDER BY usage", (self.user_id,))
+            return [r[0] for r in cur.fetchall()]
+        return self._with_connection(run)
 
     def load_fixes(self):
-        rows = self._with_connection(lambda cur: cur.execute(
-            "SELECT id, description, usage, amount, duration, start_date "
-            "FROM recurring_entries WHERE user_id=? ORDER BY start_date",
-            (self.user_id,)
-        ).fetchall())
+        def run(cur):
+            cur.execute(
+                "SELECT id, description, usage, amount, duration, start_date "
+                "FROM recurring_entries WHERE user_id=%s ORDER BY start_date",
+                (self.user_id,)
+            )
+            return cur.fetchall()
+
+        rows = self._with_connection(run)
         self.table.setRowCount(0)
         for eid, desc, usage, amt, dur, start in rows:
             r = self.table.rowCount()
@@ -258,7 +250,6 @@ class ManageFixBetrageDialog(BaseDialog):
             self.edit_mode = True
             self.btn_edit.setText("Speichern")
         else:
-            # save edited fix entry and suggestions
             try:
                 val = Decimal(self.betrag_input.text().replace(',', '.'))
             except:
@@ -277,23 +268,29 @@ class ManageFixBetrageDialog(BaseDialog):
                 return
 
             self._with_connection(lambda cur: cur.execute(
-                "UPDATE recurring_entries SET description=?,usage=?,amount=?,duration=?,start_date=? "
-                "WHERE id=? AND user_id=?",
+                "UPDATE recurring_entries SET description=%s, usage=%s, amount=%s, duration=%s, start_date=%s "
+                "WHERE id=%s AND user_id=%s",
                 (desc, usage, float(val), dur, start, self.current_edit_id, self.user_id)
             ))
             self._with_connection(lambda cur: cur.execute(
-                "UPDATE transactions SET description=?,\"usage\"=?,amount=? "
-                "WHERE recurring_id=? AND user_id=?",
+                "UPDATE transactions SET description=%s, usage=%s, amount=%s "
+                "WHERE recurring_id=%s AND user_id=%s",
                 (desc, usage, float(val), self.current_edit_id, self.user_id)
             ))
-            # also save into general suggestions
             self._with_connection(lambda cur: cur.execute(
-                "INSERT OR IGNORE INTO suggestions(user_id, suggestion_type, text) VALUES (?,?,?)",
+                "INSERT INTO suggestions(user_id, suggestion_type, text) VALUES (%s, %s, %s) "
+                "ON CONFLICT DO NOTHING",
                 (self.user_id, "description", desc)
             ))
             self._with_connection(lambda cur: cur.execute(
-                "INSERT OR IGNORE INTO suggestions(user_id, suggestion_type, text) VALUES (?,?,?)",
+                "INSERT INTO suggestions(user_id, suggestion_type, text) VALUES (%s, %s, %s) "
+                "ON CONFLICT DO NOTHING",
                 (self.user_id, "usage", usage)
+            ))
+            self._with_connection(lambda cur: cur.execute(
+                "INSERT INTO fix_suggestions(user_id, description, usage) VALUES (%s, %s, %s) "
+                "ON CONFLICT DO NOTHING",
+                (self.user_id, desc, usage)
             ))
 
             QMessageBox.information(self, "Erfolg", "Eintrag gespeichert.")
@@ -323,24 +320,26 @@ class ManageFixBetrageDialog(BaseDialog):
 
         self._with_connection(lambda cur: cur.execute(
             "INSERT INTO recurring_entries (user_id, description, usage, amount, duration, start_date) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "VALUES (%s, %s, %s, %s, %s, %s)",
             (self.user_id, desc, usage, float(amt), dur, start)
         ))
-        # record fix suggestion and general suggestions
         self._with_connection(lambda cur: cur.execute(
-            "INSERT OR IGNORE INTO fix_suggestions (user_id, description, usage) VALUES (?, ?, ?)",
+            "INSERT INTO fix_suggestions (user_id, description, usage) VALUES (%s, %s, %s) "
+            "ON CONFLICT DO NOTHING",
             (self.user_id, desc, usage)
         ))
         self._with_connection(lambda cur: cur.execute(
-            "INSERT OR IGNORE INTO suggestions(user_id, suggestion_type, text) VALUES (?,?,?)",
+            "INSERT INTO suggestions(user_id, suggestion_type, text) VALUES (%s, %s, %s) "
+            "ON CONFLICT DO NOTHING",
             (self.user_id, "description", desc)
         ))
         self._with_connection(lambda cur: cur.execute(
-            "INSERT OR IGNORE INTO suggestions(user_id, suggestion_type, text) VALUES (?,?,?)",
+            "INSERT INTO suggestions(user_id, suggestion_type, text) VALUES (%s, %s, %s) "
+            "ON CONFLICT DO NOTHING",
             (self.user_id, "usage", usage)
         ))
 
-        QMessageBox.information(self, "Erfolg", "Fix-Betrag hinzugefügt.")
+        QMessageBox.information(self, "Erfolg", "Fix‑Betrag hinzugefügt.")
         self._reset_form()
         self.load_fixes()
         self.load_suggestions()
@@ -352,17 +351,17 @@ class ManageFixBetrageDialog(BaseDialog):
             return
         ids = [int(self.table.item(r.row(), 0).text()) for r in sel]
         if QMessageBox.question(
-            self, "Löschen bestätigen",
-            f"Sollen wirklich {len(ids)} Einträge gelöscht werden?",
-            QMessageBox.Yes | QMessageBox.No
+                self, "Löschen bestätigen",
+                f"Sollen wirklich {len(ids)} Einträge gelöscht werden?",
+                QMessageBox.Yes | QMessageBox.No
         ) != QMessageBox.Yes:
             return
         self._with_connection(lambda cur: cur.executemany(
-            "DELETE FROM recurring_entries WHERE id=? AND user_id=?",
+            "DELETE FROM recurring_entries WHERE id=%s AND user_id=%s",
             [(i, self.user_id) for i in ids]
         ))
         self._with_connection(lambda cur: cur.executemany(
-            "DELETE FROM transactions WHERE recurring_id=? AND user_id=?",
+            "DELETE FROM transactions WHERE recurring_id=%s AND user_id=%s",
             [(i, self.user_id) for i in ids]
         ))
         self.load_fixes()
@@ -375,10 +374,7 @@ class ManageFixBetrageDialog(BaseDialog):
         self.dauer_input.setCurrentText("")
         self.startdatum_input.setDate(date.today().replace(day=1))
 
-
 class ManageSuggestionsDialog(BaseDialog):
-    """Dialog, um Vorschläge zu Name/Firma und Verwendungszweck zu verwalten."""
-
     def __init__(self, user_id, parent=None):
         super().__init__(parent)
         self.user_id = user_id
@@ -387,10 +383,7 @@ class ManageSuggestionsDialog(BaseDialog):
         self.resize(1000, 600)
         self.setMinimumWidth(1000)
 
-        self.display_to_internal = {
-            "Name/Firma": "description",
-            "Verwendungszweck": "usage"
-        }
+        self.display_to_internal = {"Name/Firma": "description", "Verwendungszweck": "usage"}
         self.internal_to_display = {v: k for k, v in self.display_to_internal.items()}
 
         layout = QVBoxLayout(self)
@@ -405,35 +398,36 @@ class ManageSuggestionsDialog(BaseDialog):
         layout.addWidget(self.table)
 
         form = QHBoxLayout()
-        self.type_cb = QComboBox(); self.type_cb.addItems(list(self.display_to_internal.keys()))
-        form.addWidget(QLabel("Kategorie:")); form.addWidget(self.type_cb)
+        self.type_cb = QComboBox()
+        self.type_cb.addItems(list(self.display_to_internal.keys()))
+        form.addWidget(QLabel("Kategorie:"))
+        form.addWidget(self.type_cb)
 
-        self.text_le = QLineEdit(); self.text_le.setPlaceholderText("Neuen Vorschlag eingeben…")
+        self.text_le = QLineEdit()
+        self.text_le.setPlaceholderText("Neuen Vorschlag eingeben…")
         form.addWidget(self.text_le)
 
-        add_btn = QPushButton("Hinzufügen"); add_btn.clicked.connect(self.add_suggestion)
+        add_btn = QPushButton("Hinzufügen")
+        add_btn.clicked.connect(self.add_suggestion)
         form.addWidget(add_btn)
         layout.addLayout(form)
 
-        del_btn = QPushButton("Löschen"); del_btn.clicked.connect(self.delete_selected)
+        del_btn = QPushButton("Löschen")
+        del_btn.clicked.connect(self.delete_selected)
         layout.addWidget(del_btn, alignment=Qt.AlignRight)
 
-        close_btn = QPushButton("Schließen"); close_btn.clicked.connect(self.close)
+        close_btn = QPushButton("Schließen")
+        close_btn.clicked.connect(self.close)
         layout.addWidget(close_btn, alignment=Qt.AlignRight)
 
         self._load_table()
 
     def _load_table(self):
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT suggestion_type, text FROM suggestions "
-            "WHERE user_id = ? ORDER BY suggestion_type, text",
-            (self.user_id,)
-        )
-        rows = cur.fetchall()
-        conn.close()
+        def run(cur):
+            cur.execute("SELECT suggestion_type, text FROM suggestions WHERE user_id=%s ORDER BY suggestion_type, text", (self.user_id,))
+            return cur.fetchall()
 
+        rows = self._with_connection(run)
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         for typ_int, txt in rows:
@@ -453,7 +447,8 @@ class ManageSuggestionsDialog(BaseDialog):
             return
         internal = self.display_to_internal[disp]
         self._with_connection(lambda cur: cur.execute(
-            "INSERT OR IGNORE INTO suggestions(user_id, suggestion_type, text) VALUES (?, ?, ?)",
+            "INSERT INTO suggestions(user_id, suggestion_type, text) VALUES (%s, %s, %s) "
+            "ON CONFLICT DO NOTHING",
             (self.user_id, internal, txt)
         ))
         self.text_le.clear()
@@ -464,32 +459,19 @@ class ManageSuggestionsDialog(BaseDialog):
         if not sel:
             QMessageBox.information(self, "Keine Auswahl", "Bitte wählen Sie mindestens einen Vorschlag.")
             return
-        count = len(sel)
-        if QMessageBox.question(
-            self, "Löschen bestätigen",
-            f"Sollen wirklich {count} Vorschlag(e) gelöscht werden?",
-            QMessageBox.Yes | QMessageBox.No
-        ) != QMessageBox.Yes:
-            return
-
         to_del = []
         for idx in sel:
             disp = self.table.item(idx.row(), 0).text()
             txt = self.table.item(idx.row(), 1).text()
             to_del.append((self.user_id, self.display_to_internal[disp], txt))
 
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.executemany(
-            "DELETE FROM suggestions WHERE user_id = ? AND suggestion_type = ? AND text = ?",
+        self._with_connection(lambda cur: cur.executemany(
+            "DELETE FROM suggestions WHERE user_id = %s AND suggestion_type = %s AND text = %s",
             to_del
-        )
-        conn.commit()
-        conn.close()
-
+        ))
         self._load_table()
 
-    def _on_item_changed(self, item: QTableWidgetItem):
+    def _on_item_changed(self, item):
         if item.column() != 1:
             return
         disp = self.table.item(item.row(), 0).text()
@@ -499,17 +481,12 @@ class ManageSuggestionsDialog(BaseDialog):
             for r in range(self.table.rowCount())
             if self.table.item(r, 0).text() == disp
         ]
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM suggestions WHERE user_id = ? AND suggestion_type = ?",
-            (self.user_id, internal)
-        )
-        for t in texts:
-            if t:
-                cur.execute(
-                    "INSERT OR IGNORE INTO suggestions(user_id, suggestion_type, text) VALUES (?, ?, ?)",
-                    (self.user_id, internal, t)
-                )
-        conn.commit()
-        conn.close()
+
+        def update_suggestions(cur):
+            cur.execute("DELETE FROM suggestions WHERE user_id = %s AND suggestion_type = %s", (self.user_id, internal))
+            for t in texts:
+                if t:
+                    cur.execute("INSERT INTO suggestions(user_id, suggestion_type, text) VALUES (%s, %s, %s) "
+                                "ON CONFLICT DO NOTHING", (self.user_id, internal, t))
+
+        self._with_connection(update_suggestions)
