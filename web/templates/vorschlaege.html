@@ -93,6 +93,142 @@
       background:var(--panel); color:var(--text-light);
       font-size:.9rem;
     }
+
+    /* Mobile Optimierungen */
+    .mobile-nav-container {
+      display: none; /* Wird in der Media Query auf block gesetzt */
+      width: 100%;
+      padding: 0.5rem 1rem;
+      background: var(--panel);
+    }
+
+    .mobile-nav-buttons {
+      display: flex;
+      width: 100%;
+      margin-bottom: 0.5rem;
+    }
+
+    .mobile-nav-buttons button.nav-btn,
+    .mobile-nav-buttons a.nav-btn {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem 0;
+      min-height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 0.25rem;
+      background: var(--accent);
+      color: #fff;
+      font-weight: normal;
+      border-radius: 4px;
+      font-size: 1rem;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      text-decoration: none;
+    }
+
+    .mobile-nav-buttons button.delete-btn {
+      background: #e0245e;
+    }
+
+    .mobile-add-toggle {
+      display: none; /* Wird in der Media Query auf block gesetzt */
+      width: 100%;
+      padding: 0.5rem 1rem;
+      background: #2c2c2c;
+      color: #fff;
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      text-align: center;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Anpassungen für flüssigeres Ein-/Ausblenden des Formulars */
+    .mobile-add-form {
+      display: flex; /* Immer flex, wird über max-height versteckt */
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 0 1rem; /* Padding oben/unten wird durch max-height gesteuert */
+      background: var(--panel);
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+      width: 100%;
+      overflow: hidden; /* Wichtig, um Inhalt zu verstecken */
+      max-height: 0; /* Startzustand: versteckt */
+      transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out; /* Übergang hinzufügen */
+    }
+
+    /* Zustand, wenn das Formular sichtbar ist */
+    .mobile-add-form.is-visible {
+      max-height: 500px; /* Genug Platz für das Formular (anpassen, falls nötig) */
+      padding: 1rem; /* Padding wieder hinzufügen, wenn sichtbar */
+    }
+
+
+    .mobile-add-form select,
+    .mobile-add-form input {
+      padding: 0.5rem;
+      border: 1px solid var(--text-light);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 1rem;
+      width: 100%;
+    }
+
+    .mobile-add-form button {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+        padding: 0.75rem 1rem;
+      }
+
+      .toolbar {
+        display: none; /* Desktop-Toolbar ausblenden */
+      }
+
+      main {
+        padding: 0 1rem;
+      }
+
+      .mobile-nav-container {
+        display: block;
+      }
+
+      .mobile-add-toggle {
+        display: block;
+      }
+
+      /* Responsive Tabelle */
+      table {
+        margin: 0.5rem 0;
+        font-size: 0.85rem;
+        width: 100%;
+      }
+
+      th, td {
+        padding: 0.4rem 0.5rem;
+      }
+
+      th {
+        font-size: 0.8rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -108,15 +244,30 @@
   </div>
 </header>
 
-<!-- Toolbar -->
+<div class="mobile-nav-container">
+  <div class="mobile-nav-buttons">
+    <button type="button" class="nav-btn delete-btn" onclick="deleteSelected()">Löschen</button>
+    <a href="{{ url_for('dashboard') }}" class="nav-btn">Dashboard</a>
+  </div>
+
+  <button type="button" class="mobile-add-toggle" onclick="toggleAddForm()">Neuen Vorschlag hinzufügen ▾</button>
+
+  <form id="mobile-add-form" class="mobile-add-form" method="post" action="{{ url_for('vorschlaege.index') }}">
+    <input type="hidden" name="add_sugg" value="1">
+    <select name="type" required>
+      <option value="description">Name/Firma</option>
+      <option value="usage">Verwendungszweck</option>
+    </select>
+    <input type="text" name="text" placeholder="Neuer Vorschlag" required>
+    <button type="submit">Hinzufügen</button>
+  </form>
+</div>
+
 <div class="toolbar">
-  <!-- Löschen -->
   <button type="button" class="nav-btn delete-btn" onclick="deleteSelected()">Ausgewählte löschen</button>
 
-  <!-- Zurück zum Dashboard -->
   <a href="{{ url_for('dashboard') }}" class="nav-btn">Dashboard</a>
 
-  <!-- Hinzufügen -->
   <form class="add-form" id="add-form" method="post" action="{{ url_for('vorschlaege.index') }}">
     <input type="hidden" name="add_sugg" value="1">
     <select name="type" required>
@@ -128,7 +279,6 @@
   </form>
 </div>
 
-<!-- Vorschläge-Tabelle -->
 <main>
   <form id="table-form" method="post" action="{{ url_for('vorschlaege.index') }}">
     <input type="hidden" name="delete_sugg" value="1">
@@ -177,6 +327,22 @@
       form.submit();
     } else {
       alert('Bitte wählen Sie mindestens einen Vorschlag zum Löschen aus.');
+    }
+  }
+
+  // Aktualisierte Funktion für flüssigeres Ein-/Ausblenden
+  function toggleAddForm() {
+    const form = document.getElementById('mobile-add-form');
+    const button = document.querySelector('.mobile-add-toggle');
+
+    // Toggle der Klasse 'is-visible'
+    form.classList.toggle('is-visible');
+
+    // Ändere den Button-Text basierend auf der Sichtbarkeit
+    if (form.classList.contains('is-visible')) {
+      button.innerHTML = 'Formular schließen ▴';
+    } else {
+      button.innerHTML = 'Neuen Vorschlag hinzufügen ▾';
     }
   }
 </script>

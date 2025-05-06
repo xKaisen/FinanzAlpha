@@ -1,11 +1,15 @@
 @echo off
 setlocal
 
+REM === DEFINIERE SKRIPT-VERZEICHNIS ===
+rem Setzt SCRIPT_DIR auf das Verzeichnis, in dem dieses Batch-Skript liegt.
+set SCRIPT_DIR=%~dp0
+
 REM === VERSION DEFINIEREN ===
 set VERSION=1.0.1
 set OUTDIR=dist\FinanzApp_%VERSION%
-set ICON=finanz_icon.ico
-set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
+rem Annahme: icon liegt im Skript-Verzeichnis im selben Ordner wie das Skript selbst
+set ICON=%SCRIPT_DIR%finanz_icon.ico
 
 REM Der Name, den PyInstaller erzeugt:
 set EXE_NAME=FinanzAlpha.exe
@@ -17,55 +21,77 @@ echo ======================================
 
 REM === Dist-Ordner anlegen ===
 if not exist "%OUTDIR%" (
+    echo Erstelle Ausgabeordner: "%OUTDIR%"
     mkdir "%OUTDIR%"
+) else (
+    echo Ausgabeordner existiert bereits: "%OUTDIR%"
 )
 
-REM === PyInstaller Build ===
+rem === PyInstaller Build ===
+echo Führe PyInstaller aus...
 pyinstaller ^
   --name FinanzAlpha ^
   --onefile ^
-  --noconsole ^
-  --icon=%ICON% ^
+  --windowed ^
+  --icon="%ICON%" ^
+  --add-data "%SCRIPT_DIR%web\templates;web\templates" ^
+  --add-data "%SCRIPT_DIR%web\static;web\static" ^
+  --add-data "%SCRIPT_DIR%CHANGELOG.md;." ^
   --hidden-import bcrypt ^
-  --collect-all PySide6 ^
-  start_offline.py
+  --hidden-import markdown ^
+  %SCRIPT_DIR%desktop_app.py
 
+
+rem Überprüfe, ob PyInstaller erfolgreich war
 if %ERRORLEVEL% neq 0 (
-    echo ❌ Build fehlgeschlagen.
+    echo ======================================
+    echo ❌ BUILD FEHLGESCHLAGEN. Siehe PyInstaller-Ausgabe oben für Details.
+    echo ======================================
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+rem === EXE verschieben ===
+echo Verschiebe erstellte EXE...
+rem ... (Rest des Skripts bleibt gleich) ...
+
+rem Überprüfe, ob PyInstaller erfolgreich war
+if %ERRORLEVEL% neq 0 (
+    echo ======================================
+    echo ❌ BUILD FEHLGESCHLAGEN. Siehe PyInstaller-Ausgabe oben für Details.
+    echo ======================================
     pause
     exit /b %ERRORLEVEL%
 )
 
 REM === EXE verschieben ===
+echo Verschiebe erstellte EXE...
 if exist "dist\%EXE_NAME%" (
-    move /Y "dist\%EXE_NAME%" "%EXE_PATH%"
+    rem Stelle sicher, dass der Zielordner existiert, falls er oben nicht erstellt wurde (unwahrscheinlich)
+    if not exist "%OUTDIR%" mkdir "%OUTDIR%"
+    move /Y "dist\%EXE_NAME%" "%OUTDIR%\"
+    echo ✅ EXE erfolgreich verschoben nach "%EXE_PATH%".
 ) else (
-    echo ❌ Keine EXE gefunden in dist\%EXE_NAME%.
+    echo ======================================
+    echo ❌ FEHLER: Keine EXE gefunden in "dist\%EXE_NAME%". PyInstaller hat die Datei nicht erstellt.
+    echo ======================================
     pause
     exit /b 1
 )
 
-REM === Signieren, falls signtool vorhanden ===
-if exist %SIGNTOOL% (
-    echo ======================================
-    echo 🔐 Signiere .exe mit signtool
-    echo ======================================
-    %SIGNTOOL% sign ^
-        /fd SHA256 ^
-        /a ^
-        /td SHA256 ^
-        /tr http://timestamp.digicert.com ^
-        /v ^
-        "%EXE_PATH%"
-    if %ERRORLEVEL% equ 0 (
-        echo ✅ Signierung erfolgreich abgeschlossen.
-    ) else (
-        echo ⚠️  Signierung fehlgeschlagen – .exe bleibt unsigniert.
-    )
-) else (
-    echo ⚠️  signtool.exe nicht gefunden – überspringe Signierung.
-)
+rem --- Der Signierungs-Abschnitt wurde hier entfernt ---
+
 
 echo.
-echo ✅ Build abgeschlossen: %EXE_PATH%
+echo ======================================
+echo ✅ BUILD V%VERSION% ERFOLGREICH ABGESCHLOSSEN.
+echo ======================================
+echo Die fertige Anwendung findest du hier:
+echo "%EXE_PATH%"
+echo.
+
+rem Halte das Fenster offen, damit der Benutzer die Meldungen lesen kann
 pause
+
+rem Beende das lokale Environment der Batchdatei
+endlocal

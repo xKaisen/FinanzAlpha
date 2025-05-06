@@ -12,6 +12,10 @@
       --panel: #f5f5f5;
       --accent: #1db954;
       --text-light: #666;
+      --update-banner-bg: #fff3cd; /* Light orange/yellow */
+      --update-banner-color: #856404; /* Dark yellow */
+      --update-banner-border: #ffeeba;
+      --debug-color: #007bff; /* A color for debug text */
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -20,6 +24,10 @@
         --panel: #1e1e1e;
         --accent: #1ed760;
         --text-light: #888;
+        --update-banner-bg: #4f4214; /* Darker orange/yellow */
+        --update-banner-color: #ffeeba; /* Lighter yellow */
+        --update-banner-border: #856404;
+        --debug-color: #00bfff; /* A color for debug text in dark mode */
       }
     }
     * { box-sizing: border-box; margin:0; padding:0; }
@@ -34,6 +42,9 @@
       padding:2rem; border-radius:8px;
       box-shadow:0 4px 12px rgba(0,0,0,0.1);
       width:100%; max-width:360px;
+      display: flex; /* Use flexbox for internal layout */
+      flex-direction: column;
+      align-items: center; /* Center content horizontally */
     }
     h1 {
       text-align:center;
@@ -42,25 +53,55 @@
     .flash-messages {
       margin-bottom:1rem;
       text-align:center;
+      width: 100%; /* Make flash messages take full width */
     }
     .flash {
-      display:inline-block;
-      padding:.5rem 1rem;
+      display:block; /* Change from inline-block to block for better spacing */
+      padding:.75rem 1.25rem; /* Adjust padding */
+      border: 1px solid transparent; /* Add border for better styling */
       border-radius:4px;
       margin-bottom:.5rem;
+      text-align: left; /* Align text left */
     }
     .flash.error {
-      background:#ffe6e6;
-      color:#b00020;
+      color: #721c24;
+      background-color: #f8d7da;
+      border-color: #f5c6cb;
     }
     .flash.success {
-      background:#e6ffe6;
-      color:#006400;
+      color: #155724;
+      background-color: #d4edda;
+      border-color: #c3e6cb;
     }
+    /* Update Banner Styling */
+    .update-banner {
+        width: 100%;
+        background-color: var(--update-banner-bg);
+        color: var(--update-banner-color);
+        border: 1px solid var(--update-banner-border);
+        border-radius: 4px;
+        padding: 1rem;
+        margin-bottom: 1.5rem; /* Space below the banner */
+        text-align: center;
+        font-weight: bold;
+    }
+    .update-banner p {
+        margin-bottom: 0.5rem;
+    }
+     .update-banner form {
+        margin-top: 1rem; /* Space above the button */
+     }
+     .update-banner button {
+         width: auto; /* Button doesn't need full width in the banner */
+         padding: .5rem 1rem; /* Smaller padding for banner button */
+         font-size: .9rem; /* Smaller font size */
+     }
+
     label {
       display:block;
       margin-bottom:.5rem;
       font-size:.9rem;
+      width: 100%; /* Make label take full width */
     }
     input {
       width:100%;
@@ -71,7 +112,8 @@
       background: var(--bg);
       color: var(--fg);
     }
-    button {
+    /* Style for the main login/register buttons */
+    button:not(.update-banner button) {
       width:100%;
       padding:.75rem;
       background: var(--accent);
@@ -82,29 +124,64 @@
       cursor:pointer;
       transition: filter .2s;
     }
-    button:hover {
-      filter: brightness(0.9);
-    }
+     button:not(.update-banner button):hover {
+       filter: brightness(0.9);
+     }
+
+    /* Style for the link-btn buttons (Registrieren, Changelog) */
+    /* Use button[type="submit"].link-btn to be more specific if needed */
     .link-btn {
       width:100%;
-      background: transparent;
-      color: var(--accent);
-      border: none;
-      text-decoration: underline;
+      background: transparent; /* No background */
+      color: var(--accent); /* Accent color for text */
+      border: none; /* No border */
+      text-decoration: underline; /* Underline text */
       cursor: pointer;
       font-size:.9rem;
-      margin-top:.5rem;
+      margin-top:.5rem; /* Space above */
+      padding: .75rem; /* Add padding to make it clickable area bigger */
+      text-align: center; /* Center the text */
+      /* Reset default button styles that might interfere */
+      display: block; /* Ensure it takes up space like a block */
     }
+    .link-btn:hover {
+         text-decoration: none; /* Remove underline on hover */
+         filter: brightness(0.9); /* Optional: slight color change */
+    }
+
+
     .footer {
       margin-top:1.5rem;
       text-align:center;
       font-size:.8rem;
       color: var(--text-light);
+      width: 100%; /* Make footer take full width */
     }
+     /* REMOVED: Styling for debug info was here */
   </style>
 </head>
 <body>
   <div class="card">
+
+    {# UPDATE BANNER HIER EINFÜGEN #}
+    {# Zeige Banner nur, wenn Update verfügbar und Desktop-Version #}
+    {% if is_desktop and update_available %}
+        <div class="update-banner">
+            <p><strong>Wichtiges Update verfügbar!</strong></p>
+            <p>Ihre Version: {{ app_version }}<br>Neueste Version: {{ latest_available_version }}</p>
+            <p>Bitte dringend aktualisieren.</p>
+
+            {# Button, der die Update-Route aufruft #}
+            {# Nutzt POST-Methode und fragt zur Sicherheit nach #}
+            {# Füge den desktop Parameter hinzu, um den Status bei einem Fallback-Redirect zu erhalten #}
+            <form method="POST" action="{{ url_for('start_update', desktop='1') }}" onsubmit="return confirm('Möchten Sie das Update jetzt starten? Die Anwendung wird dabei neu gestartet.');">
+                 <button type="submit" class="update-banner-button">Update starten</button> {# Eigene Klasse für Banner-Button #}
+            </form>
+        </div>
+    {% endif %}
+    {# ENDE UPDATE BANNER #}
+
+
     <h1>FinanzApp Login</h1>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -117,7 +194,8 @@
       {% endif %}
     {% endwith %}
 
-    <form method="post" action="{{ url_for('login') }}">
+    {# Formulare nehmen jetzt 100% Breite vom Flex-Container Card ein #}
+    <form method="post" action="{{ url_for('login') }}" style="width:100%;">
       <label for="username">Benutzername</label>
       <input id="username" name="username" value="{{ request.form.username or '' }}" required autofocus>
       <label for="password">Passwort</label>
@@ -125,12 +203,24 @@
       <button type="submit">Einloggen</button>
     </form>
 
-    <form method="get" action="{{ url_for('register') }}">
+    {# Button für Registrieren #}
+    <form method="get" action="{{ url_for('register') }}" style="width:100%;">
       <button type="submit" class="link-btn">Registrieren</button>
     </form>
 
+    {# Button für Changelog - HIER HINZUGEFÜGT #}
+    <form method="get" action="{{ url_for('changelog', desktop='1') }}" style="width:100%;">
+      <button type="submit" class="link-btn">Changelog</button>
+    </form>
+    {# ENDE Button für Changelog #}
+
+
+    {# REMOVED: DEBUG-INFORMATIONEN HIER EINFÜGEN (TEMPORÄR) #}
+    {# Die div class="debug-info" wurde hier entfernt #}
+
+
     <div class="footer">
-      © 2025 xKAISEN – Version {{ version }}
+      © 2025 xKAISEN – Version {{ app_version }} {# Nutze app_version vom context_processor #}
     </div>
   </div>
 </body>

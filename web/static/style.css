@@ -189,3 +189,39 @@ button:hover, .btn:hover {
     color: #bbb;
   }
 }
+
+/* =========================
+   Mobile Optimierung
+========================= */
+@media (max-width: 768px) {
+  .add-form input,
+  .add-form button,
+  .toolbar input,
+  .toolbar select,
+  .toolbar button,
+  .search-wrapper input,
+  .search-wrapper button,
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  select,
+  textarea,
+  button {
+    font-size: 0.9rem !important;
+    padding: 0.3rem 0.5rem !important;
+    height: auto !important;
+    min-height: 2rem !important;
+    line-height: 1.2 !important;
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  .toolbar label {
+    width: 100%;
+  }
+
+  .toolbar a.nav-btn {
+    width: 100%;
+    text-align: center;
+  }
+}

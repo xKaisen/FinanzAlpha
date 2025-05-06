@@ -71,7 +71,6 @@
     },
     "0.4.0": {
         "features": [
-			"🚀 BIG UI UPDATE️ 🚀",
             "Sync Button für Internet Sync mit der Web App",
             "Name/Firma und Verwendungszwech Verwaltung",
             "Kleinere Fixes"
@@ -79,14 +78,14 @@
         "bugfixes": [],
         "known_issues": [],
         "coming_soon": [
-            "📌 WEB MIGRATION + WEB APP📌",
-            "☁️ Cloud-Sync",
             "📱 Smartphone/Tablet Support"
         ]
     },
-	    "0.6.0": {
+	    "1.0.1": {
         "features": [
-            " ☁️ Could Sync Button Implementiert☁️"
+            "🚀 BIG UI UPDATE️ 🚀",
+			" ☁️ Could Sync Button Implementiert☁️",
+			" WEB APP Testing"
         ],
         "bugfixes": [],
         "known_issues": [],
