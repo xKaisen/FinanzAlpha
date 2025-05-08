@@ -1,192 +1,93 @@
+from datetime import datetime
+from typing import Tuple, Union
+
 import bcrypt
 import hashlib
-from typing import Tuple, Union
-from core.db import get_db_connection
+from sqlalchemy.exc import IntegrityError
+
+from core.db import Session
+from core.models import User
 from utils import check_password
 
 
-# ---------------------------------------------------------------------------
-# LOGIN
-# ---------------------------------------------------------------------------
-
 def login_user(username: str, password: str) -> Tuple[bool, Union[str, Tuple[int, bool]]]:
-    """
-    Authentifiziert einen Benutzer
-
-    Args:
-        username: Der Benutzername
-        password: Das Klartext-Passwort
-
-    Returns:
-        Tuple: (success, message_or_data)
-               - success: True wenn erfolgreich
-               - message_or_data: Fehlermeldung oder (user_id, is_admin)
-    """
-    conn = None
+    session = Session()
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # Benutzerdaten abrufen (case-insensitive)
-        cur.execute(
-            "SELECT id, password_hash, COALESCE(is_admin, false) AS is_admin "
-            "FROM users WHERE lower(username) = lower(%s)",
-            (username,)
-        )
-        row = cur.fetchone()
-
-        if not row:
+        user = session.query(User).filter(User.username.ilike(username)).first()
+        if not user:
             return False, "Benutzername oder Passwort falsch"
 
-        user_id, stored_hash, is_admin = row
-
-        if not stored_hash:
-            return False, "Interner Fehler: kein Passwort-Hash hinterlegt"
-
-        # BCrypt Hash (neues Format)
-        if str(stored_hash).startswith("$2"):
-            if bcrypt.checkpw(password.encode(), stored_hash.encode()):
-                return True, (user_id, is_admin)
-            return False, "Benutzername oder Passwort falsch"
-
-        # Legacy SHA256 Hash (Migration)
-        sha256_hash = hashlib.sha256(password.encode()).hexdigest()
-        if sha256_hash == stored_hash:
-            # Auf BCrypt migrieren
+        stored = user.password_hash or ""
+        if stored.startswith("$2"):
+            if not bcrypt.checkpw(password.encode(), stored.encode()):
+                return False, "Benutzername oder Passwort falsch"
+        else:
+            if hashlib.sha256(password.encode()).hexdigest() != stored:
+                return False, "Benutzername oder Passwort falsch"
+            # Migration
             new_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-            cur.execute(
-                "UPDATE users SET password_hash = %s WHERE id = %s",
-                (new_hash, user_id)
-            )
-            conn.commit()
-            return True, (user_id, is_admin)
+            user.password_hash = new_hash
+            session.commit()
 
-        return False, "Benutzername oder Passwort falsch"
-
+        return True, (user.id, user.is_admin)
     except Exception as e:
-        return False, f"Login-Fehler: {str(e)}"
+        session.rollback()
+        return False, f"Login-Fehler: {e}"
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
-
-# ---------------------------------------------------------------------------
-# REGISTRIERUNG
-# ---------------------------------------------------------------------------
 
 def register_user(username: str, password: str, is_admin: bool = False) -> Tuple[bool, str]:
-    """
-    Registriert einen neuen Benutzer
-
-    Args:
-        username: Der gewünschte Benutzername
-        password: Das Klartext-Passwort
-        is_admin: Ob der Benutzer Admin-Rechte erhalten soll
-
-    Returns:
-        Tuple: (success, message)
-    """
-    # Passwortvalidierung
     valid, msg = check_password(password)
     if not valid:
         return False, msg
 
-    conn = None
+    session = Session()
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # Existenzprüfung (case-insensitive)
-        cur.execute(
-            "SELECT 1 FROM users WHERE lower(username) = lower(%s)",
-            (username,)
-        )
-        if cur.fetchone():
-            return False, "Benutzer existiert bereits."
-
-        # Einmaliger Admin-Check
         if is_admin:
-            cur.execute("SELECT 1 FROM users WHERE is_admin = TRUE LIMIT 1")
-            if cur.fetchone():
+            if session.query(User).filter_by(is_admin=True).first():
                 return False, "Es existiert bereits ein Admin-Account."
 
-        # Passwort hashen
         pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-        # Benutzer anlegen
-        cur.execute(
-            "INSERT INTO users (username, password_hash, is_admin) "
-            "VALUES (%s, %s, %s)",
-            (username, pw_hash, is_admin)
+        user = User(
+            username=username,
+            password_hash=pw_hash,
+            is_admin=is_admin,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
         )
-        conn.commit()
+        session.add(user)
+        session.commit()
         return True, "Registrierung erfolgreich"
-
+    except IntegrityError:
+        session.rollback()
+        return False, "Benutzername bereits vergeben."
     except Exception as e:
-        if conn:
-            conn.rollback()
-        return False, f"Registrierungsfehler: {str(e)}"
+        session.rollback()
+        return False, f"Registrierungsfehler: {e}"
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
-
-# ---------------------------------------------------------------------------
-# HILFSFUNKTIONEN
-# ---------------------------------------------------------------------------
 
 def change_password(user_id: int, old_password: str, new_password: str) -> Tuple[bool, str]:
-    """
-    Ändert das Passwort eines Benutzers
-
-    Args:
-        user_id: Die ID des Benutzers
-        old_password: Das aktuelle Passwort
-        new_password: Das neue Passwort
-
-    Returns:
-        Tuple: (success, message)
-    """
     valid, msg = check_password(new_password)
     if not valid:
         return False, msg
 
-    conn = None
+    session = Session()
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-
-        # Aktuellen Hash abrufen
-        cur.execute(
-            "SELECT password_hash FROM users WHERE id = %s",
-            (user_id,)
-        )
-        row = cur.fetchone()
-
-        if not row:
+        user = session.get(User, user_id)
+        if not user:
             return False, "Benutzer nicht gefunden"
+        if not bcrypt.checkpw(old_password.encode(), user.password_hash.encode()):
+            return False, "Altes Passwort ist falsch"
 
-        stored_hash = row[0]
-
-        # Passwort verifizieren
-        if not bcrypt.checkpw(old_password.encode(), stored_hash.encode()):
-            return False, "Aktuelles Passwort ist falsch"
-
-        # Neuen Hash generieren
-        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-
-        # Passwort aktualisieren
-        cur.execute(
-            "UPDATE users SET password_hash = %s WHERE id = %s",
-            (new_hash, user_id)
-        )
-        conn.commit()
+        user.password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        user.updated_at = datetime.utcnow()
+        session.commit()
         return True, "Passwort erfolgreich geändert"
-
     except Exception as e:
-        if conn:
-            conn.rollback()
-        return False, f"Fehler beim Passwortwechsel: {str(e)}"
+        session.rollback()
+        return False, f"Fehler beim Passwortwechsel: {e}"
     finally:
-        if conn:
-            conn.close()
+        session.close()

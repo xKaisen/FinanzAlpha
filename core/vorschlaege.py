@@ -1,3 +1,4 @@
+#core/vorschlaege
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from core.db import get_db_connection
 from core.version import __version__

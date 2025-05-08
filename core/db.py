@@ -1,31 +1,45 @@
 import os
-from dotenv import load_dotenv  # .env-Datei laden
+import logging
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-# ─── 1. .env-Datei laden ───────────────────────────────────────
+from core.models import Base
+
 load_dotenv()
 
-# ─── 2. PostgreSQL-Verbindungs-URL auslesen ────────────────────
-DB_URL = os.getenv("DATABASE_URL")
-if not DB_URL:
-    raise RuntimeError("DATABASE_URL nicht gesetzt – bitte in .env eintragen.")
+MODE         = os.getenv("APP_MODE", "online").lower()
+SQLITE_PATH  = os.getenv("SQLITE_PATH", "local.db")
+POSTGRES_URL = os.getenv("DATABASE_URL")
 
-# ─── 3. SQLAlchemy Engine und Session erstellen ────────────────
+if MODE == "offline":
+    DB_URL = f"sqlite:///{SQLITE_PATH}"
+elif not POSTGRES_URL:
+    raise RuntimeError("DATABASE_URL nicht gesetzt – bitte in .env eintragen.")
+else:
+    DB_URL = POSTGRES_URL
+
 engine = create_engine(DB_URL, echo=False)
+
+try:
+    Base.metadata.create_all(engine)
+    logging.info(f"Datenbank initialisiert: {DB_URL}")
+except OperationalError as e:
+    logging.warning(f"Remote-DB nicht erreichbar ({DB_URL}): {e}")
+    if MODE != "offline":
+        fallback = f"sqlite:///{SQLITE_PATH}"
+        engine = create_engine(fallback, echo=False)
+        Base.metadata.create_all(engine)
+        logging.info(f"SQLite-Fallback initialisiert: {fallback}")
+    else:
+        logging.error("Offline-Modus aktiv, kann SQLite-DB nicht anlegen.", exc_info=True)
+        raise
+
 Session = scoped_session(sessionmaker(bind=engine))
 
-# ─── 4. Direkte Verbindung (optional) ──────────────────────────
 def get_db_connection():
-    """
-    Gibt eine rohe DB-Verbindung zurück (z. B. für Low-Level-Zugriffe).
-    """
     return engine.raw_connection()
 
-# ─── 5. Tabellen initialisieren ────────────────────────────────
 def init_db():
-    """
-    Erstellt alle Tabellen gemäß core/models.py.
-    """
-    from core.models import Base
     Base.metadata.create_all(engine)

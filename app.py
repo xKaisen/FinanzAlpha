@@ -1,26 +1,33 @@
 # app.py (Vollständig & Angepasst mit Changelog Route und Sync Route)
 import os
-import sys # Importiere sys für die Pfad-Ermittlung im AppData Helper
-from dotenv import load_dotenv
+import sys
+# Projekt-Root am Anfang des Suchpfads (HACK, bis das Paket installiert ist)
+sys.path.insert(0, os.path.dirname(__file__))
 
-# Lade Umgebungsvariablen aus der .env Datei (z.B. FLASK_SECRET, DB_URL)
-# Stelle sicher, dass eine .env Datei existiert, auch wenn nur mit FLASK_SECRET.
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+import logging
+import markdown
+from datetime import date
+from sqlalchemy.engine import Engine
+
+# Umgebungs­variablen laden (FLASK_SECRET, DB_URL usw.)
 load_dotenv()
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
-# Importiere deine Kernmodule
-# Stelle sicher, dass diese Dateien und die benötigten Funktionen/Blueprints existieren.
-# >>> PASSE DEN IMPORT AN: get_db_connection und init_db aus core.db holen <<<
+# Eigene Module
 from core.db import get_db_connection, init_db
-from core.auth import login_user, register_user # Wird in /login und /register verwendet
-from core.version import __version__, VersionService # __version__ für Versionsinfo, VersionService für last_version (optional genutzt)
-from core.fixkosten import create_fix_transactions, insert_missing_fix_transactions # Wird in /add_entry und /fixkosten verwendet
-from core.vorschlaege import bp as vorschlaege_bp # Dein Blueprint für Vorschläge
-from api.routes import api as api_bp # Dein API Blueprint
+from core.auth import login_user, register_user
+from core.version import __version__
+from core.fixkosten import create_fix_transactions
+from core.vorschlaege import bp as vorschlaege_bp
+from api import api, sync_bp
+from sync import sync               # <-- Import der lokalen Sync-Funktion
 
-from datetime import date
-import logging # Importiere Logging
-import markdown # <-- Füge den markdown Import hinzu! (Benötigt 'pip install markdown')
+# ganz oben, nach Deinen Imports
+from core.db import engine
+
+def is_sqlite() -> bool:
+    return engine.url.get_backend_name() == 'sqlite'
 
 
 # --- Importiere Update-Funktionen ---
@@ -32,134 +39,83 @@ try:
     from updater import check_for_update, install_update
 except ImportError:
     # Logge eine Warnung, wenn updater.py nicht gefunden wird (Datei fehlt, Name falsch, etc.)
-    logging.warning("Could not import updater module (updater.py not found or has import errors). Update functionality will be disabled.", exc_info=True) # Logge exc_info
-    check_for_update = None # Setze Funktionen auf None, wenn Import fehlschlägt
+    logging.warning("Could not import updater module (updater.py not found or has import errors). Update functionality will be disabled.", exc_info=True)
+    check_for_update = None
     install_update = None
 except Exception as e:
-     # Fange andere potenzielle Fehler beim Import ab (z.B. SyntaxError in updater.py)
-     logging.error(f"An unexpected error occurred during updater module import: {e}", exc_info=True) # Logge den spezifischen Fehler
-     check_for_update = None
-     install_update = None
+    logging.error(f"An unexpected error occurred during updater module import: {e}", exc_info=True)
+    check_for_update = None
+    install_update = None
 # ------------------------------------
 
-
 # --- Konfiguriere Logging ---
-# Setze das Level auf INFO, um auch Infos und Warnungen von Flask und deinen Modulen zu sehen
-# Passe das Format ggf. an
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# logger = logging.getLogger(__name__) # Optional: eigenen Logger für app.py
-
 
 def create_app():
-    # Bestimme das Basisverzeichnis der Anwendung (dort, wo app.py liegt)
     base = os.path.abspath(os.path.dirname(__file__))
     app = Flask(
         __name__,
-        template_folder=os.path.join(base, 'web', 'templates'), # Pfad zu deinen HTML-Templates
-        static_folder=os.path.join(base, 'web', 'static')     # Pfad zu deinen statischen Dateien (CSS, JS, Bilder)
+        template_folder=os.path.join(base, 'web', 'templates'),
+        static_folder=os.path.join(base, 'web', 'static')
     )
-    # Setze den geheimen Schlüssel aus Umgebungsvariablen (wichtig für Sessions)
-    # Ändere den Standardwert in der Produktion!
     app.secret_key = os.getenv("FLASK_SECRET", "ein-sehr-geheimer-entwicklungs-schluessel-bitte-aendern")
-    # Konfigurationsflag, um sicherzustellen, dass die DB nur einmal initialisiert wird
     app.config.setdefault('DB_INITIALIZED', False)
 
     # --- Request Hook: Wird VOR jeder Anfrage ausgeführt ---
     @app.before_request
     def ensure_db_initialized():
-        # Initialisiere die Datenbank nur beim ersten Request
         if not app.config['DB_INITIALIZED']:
             try:
-                init_db() # Rufe deine Datenbank-Initialisierungsfunktion auf
+                init_db()
                 app.config['DB_INITIALIZED'] = True
                 logging.info("Datenbank initialisiert.")
-                # Optional: Speichere die aktuelle Version nach erfolgreicher DB-Initialisierung
-                # (Das signalisiert einen erfolgreichen Start bis zu diesem Punkt)
-                # >>> Stelle sicher, dass VersionService die korrekte DB-Verbindung über get_db_connection nutzt <<<
-                # VersionService.set_last_version(__version__) # Dies muss angepasst werden
-                logging.info(f"Aktuelle Version {__version__} als zuletzt gestartete Version gespeichert (Platzhalter).") # Angepasste Meldung
+                logging.info(f"Aktuelle Version {__version__} als zuletzt gestartete Version gespeichert (Platzhalter).")
             except Exception as e:
                 logging.error(f"Kritischer Fehler bei der Datenbankinitialisierung oder beim Speichern der Version: {e}", exc_info=True)
-                app.config['DB_INITIALIZED'] = True # Setze Flag, auch wenn Fehler, um Schleife zu vermeiden
+                app.config['DB_INITIALIZED'] = True
                 flash("Fehler bei der Datenbankinitialisierung. Die App funktioniert möglicherweise nicht richtig.", 'error')
-
 
     # --- Context Processor: Wird VOR jedem Template-Rendering ausgeführt ---
     @app.context_processor
     def inject_update_flag():
-        """
-        Stellt 'is_desktop', 'latest_available_version', 'update_available'
-        und 'app_version' allen Templates zur Verfügung.
-        Wird für das Update-Banner auf der Login-Seite und potenziell anderswo verwendet.
-        """
-        # Standardwerte
         is_desktop = False
         latest_version = None
         update_available = False
-
-        # Bestimme, ob es sich um eine Desktop-Anwendung handelt, basierend auf dem Query-Parameter
-        # request ist nur innerhalb eines Request-Kontextes verfügbar, muss geprüft werden
         if hasattr(request, 'args'):
-             is_desktop = request.args.get("desktop") == "1"
-
-        # Prüfe auf Updates nur, wenn es sich um eine Desktop-Anwendung handelt könnte
-        # UND die check_for_update Funktion erfolgreich importiert wurde
+            is_desktop = request.args.get("desktop") == "1"
         if is_desktop and check_for_update:
             try:
-                # Rufe die check_for_update Funktion aus updater.py auf.
-                # Übergebe die aktuelle Version (__version__) zur Vergleichung.
-                # Erwartet zurück: (neueste_versionsnummer_string ODER None, Daten ODER None)
-                # Die check_for_update Funktion sollte intern Caching nutzen, um nicht bei jeder Anfrage GitHub zu pollen.
-                check_result = check_for_update(__version__) # <-- Übergebe __version__
-
-                # Überprüfe das Ergebnis von check_for_update
+                check_result = check_for_update(__version__)
                 if isinstance(check_result, tuple) and len(check_result) > 0:
-                     potential_latest_version = check_result[0]
-                     # Setze latest_version nur, wenn es ein String ist (kann None sein)
-                     if isinstance(potential_latest_version, str):
-                          latest_version = potential_latest_version
-                     elif potential_latest_version is not None:
-                          logging.warning(f"check_for_update gab unerwarteten Typ für latest_version zurück: {type(potential_latest_version)}. Erwartet: str oder None.")
-
-
+                    potential_latest_version = check_result[0]
+                    if isinstance(potential_latest_version, str):
+                        latest_version = potential_latest_version
+                    elif potential_latest_version is not None:
+                        logging.warning(f"check_for_update gab unerwarteten Typ für latest_version zurück: {type(potential_latest_version)}.")
             except Exception as e:
                 logging.error(f"Fehler bei Update-Check für Template im context processor: {e}", exc_info=True)
-                # latest_version bleibt None im Fehlerfall
-
-        # update_available ist True, wenn eine neuere Version gefunden wurde (latest_version ist ein String)
         update_available = latest_version is not None
-
-        # Gib die Variablen für das Template zurück
         return {
-            'is_desktop': is_desktop,                       # True, wenn ?desktop=1 in der URL
-            'latest_available_version': latest_version,     # Die Versionsnummer des Updates (String) oder None
-            'update_available': update_available,           # True, wenn ein Update gefunden wurde (latest_version ist nicht None)
-            'app_version': __version__,                     # Die Version der aktuell laufenden App (aus core.version.py)
-            'username': session.get('username'),            # Username (verfügbar, wenn angemeldet)
-            'is_admin': session.get('is_admin', False)      # Admin Status (verfügbar, wenn angemeldet)
-            # Weitere global benötigte Variablen können hier hinzugefügt werden
-            # >>> Füge hier ggf. weitere Kontext-Variablen hinzu (z.B. fuer Dark Mode) <<<
+            'is_desktop': is_desktop,
+            'latest_available_version': latest_version,
+            'update_available': update_available,
+            'app_version': __version__,
+            'username': session.get('username'),
+            'is_admin': session.get('is_admin', False)
         }
-    # -----------------------------------------------------------------------
-
+    # ------------------------------------
 
     # --- Routen Definitionen ---
-
     @app.route('/')
     def index():
         is_desktop_request = request.args.get("desktop") == "1"
-        # Speichere den Desktop-Status in der Session für spätere Verwendung (z.B. Logout)
         session['is_desktop_session'] = is_desktop_request
         logging.info(f"Root Request. Desktop status set in session: {is_desktop_request}")
-
         if session.get('user_id'):
-            # Wenn angemeldet, leite zum Dashboard weiter.
             return redirect(url_for('dashboard'))
-
-        # Wenn nicht angemeldet, leite zur Login-Seite weiter.
         if is_desktop_request:
             logging.info("Desktop-Parameter im Wurzel-Request gefunden, leite zu /login?desktop=1 weiter.")
-            return redirect(url_for('login', desktop='1')) # Pass the parameter
+            return redirect(url_for('login', desktop='1'))
         else:
             logging.info("Kein Desktop-Parameter im Wurzel-Request gefunden, leite zu /login weiter.")
             return redirect(url_for('login'))
@@ -182,14 +138,11 @@ def create_app():
             session['is_desktop_session'] = old_is_desktop_session
             flash("Erfolgreich angemeldet!", 'success')
             return redirect(url_for('dashboard'))
-
         if request.method == 'GET':
-             is_desktop_request = request.args.get("desktop") == "1"
-             session['is_desktop_session'] = is_desktop_request
-             logging.info(f"Login GET Request. Desktop status set in session: {is_desktop_request}")
-
+            is_desktop_request = request.args.get("desktop") == "1"
+            session['is_desktop_session'] = is_desktop_request
+            logging.info(f"Login GET Request. Desktop status set in session: {is_desktop_request}")
         return render_template('login.html')
-
 
     @app.route('/register', methods=['GET', 'POST'])
     def register():
@@ -203,7 +156,6 @@ def create_app():
                 return render_template('register.html', username=username)
             flash(msg, 'success')
             return redirect(url_for('login'))
-
         return render_template('register.html')
 
     @app.route('/logout')
@@ -212,256 +164,180 @@ def create_app():
         session.clear()
         flash("Abgemeldet.", 'info')
         logging.info(f"Benutzer abgemeldet. Desktop Status vor Session Clear genutzt: {is_desktop_status}")
-
         if is_desktop_status:
-            logging.info("Umleitung zu /login?desktop=1 nach Abmeldung.")
             return redirect(url_for('login', desktop='1'))
         else:
-            logging.info("Umleitung zu /login nach Abmeldung.")
             return redirect(url_for('login'))
-
 
     @app.route('/changelog')
     def changelog():
-        """Route zur Anzeige des Anwendungs-Changelogs."""
         changelog_path = os.path.join(app.root_path, 'CHANGELOG.md')
-        changelog_content = "Changelog Datei nicht gefunden." # Fallback-Nachricht
-
+        changelog_content = "Changelog Datei nicht gefunden."
         try:
             with open(changelog_path, 'r', encoding='utf-8') as f:
                 markdown_text = f.read()
                 changelog_content = markdown.markdown(markdown_text)
         except FileNotFoundError:
             logging.error(f"CHANGELOG.md nicht gefunden unter {changelog_path}")
-            logging.debug(f"App Wurzelverzeichnis: {app.root_path}")
         except Exception as e:
             logging.error(f"Fehler beim Lesen oder Konvertieren von CHANGELOG.md: {e}", exc_info=True)
             changelog_content = f"Fehler beim Laden des Changelogs: {e}"
-
         return render_template('changelog.html', changelog_content=changelog_content)
 
-
-    # --- NEUE ROUTE FÜR DATEN SYNCHRONISIERUNG (PLATZHALTER) ---
-    # Diese Route wird vom Sync-Button im Dashboard aufgerufen
     @app.route('/sync_data', methods=['POST'])
     def sync_data():
-        # Prüfe, ob Benutzer angemeldet ist
         if not session.get('user_id'):
             flash("Bitte melde dich an, um Daten zu synchronisieren.", 'warning')
-            # Leite zur Login-Seite um, mit dem Desktop-Parameter, falls es eine Desktop-Session war
             is_desktop_status = session.get('is_desktop_session', False)
-            if is_desktop_status:
-                 return redirect(url_for('login', desktop='1'))
-            else:
-                 return redirect(url_for('login'))
-
+            return redirect(url_for('login', desktop='1' if is_desktop_status else None))
         user_id = session['user_id']
         logging.info(f"Sync-Anforderung für Nutzer {user_id} erhalten.")
-
-        # >>>>> HIER KOMMT SPÄTER DIE SYNCHRONISIERUNGSLOGIK HIN <<<<<
-        # Lese den Desktop-Status aus der Session, um zu wissen, welche DB lokal ist
-        is_desktop_session = session.get('is_desktop_session', False)
-        if is_desktop_session:
-             logging.info("Sync-Anforderung kommt von der Desktop-App (SQLite erwartet).")
-             # Hier kommt die Logik, um Daten vom Server (PostgreSQL) abzurufen
-             # und in die lokale SQLite-Datenbank zu schreiben.
-        else:
-             logging.info("Sync-Anforderung kommt von der Web-App (PostgreSQL erwartet).")
-             # Hier käme Logik, um Daten vom Desktop (SQLite) abzurufen (falls Desktop-zu-Web-Sync gewünscht)
-             # oder einfach eine Info, dass der Sync hauptsächlich für Desktop ist.
-             flash("Synchronisierung startet...", 'info') # Vorläufige Nachricht
-             logging.warning("Web-App Sync-Logik ist noch nicht implementiert oder relevant.")
-        # >>>>> ENDE PLATZHALTER <<<<<
-
-
-        # Nach der Synchronisierung (oder dem Platzhalter), leite zurück zum Dashboard.
-        # Es ist wichtig, hier wieder den desktop=1 Parameter anzuhängen,
-        # damit das Dashboard im Desktop-Modus bleibt und der Context Processor korrekt läuft.
-        # Hole den Status wieder aus der Session für die Weiterleitung
+        # Hier erfolgt nun der tatsächliche Sync
+        try:
+            sync(user_id)
+            flash("Synchronisierung erfolgreich.", 'success')
+        except Exception as e:
+            logging.error(f"Fehler beim Synchronisieren: {e}", exc_info=True)
+            flash("Synchronisierung fehlgeschlagen.", 'error')
         is_desktop_status = session.get('is_desktop_session', False)
-        if is_desktop_status:
-             logging.info("Leite nach Sync zurück zum Dashboard (Desktop).")
-             return redirect(url_for('dashboard', desktop='1'))
-        else:
-             logging.info("Leite nach Sync zurück zum Dashboard (Web).")
-             return redirect(url_for('dashboard'))
-
-    # --- ENDE ROUTE FÜR DATEN SYNCHRONISIERUNG ---
-
+        return redirect(url_for('dashboard', desktop='1' if is_desktop_status else None))
 
     @app.route('/dashboard')
     def dashboard():
         # Prüfe, ob der Benutzer angemeldet ist
         if not session.get('user_id'):
             flash("Bitte melde dich an, um das Dashboard zu sehen.", 'warning')
-            is_desktop_status = session.get('is_desktop_session', False)
-            if is_desktop_status:
-                 return redirect(url_for('login', desktop='1'))
-            else:
-                 return redirect(url_for('login'))
+            is_desktop = session.get('is_desktop_session', False)
+            return redirect(url_for('login', desktop='1' if is_desktop else None))
 
+        # Ab hier richtig eingerückt!
         user_id = session['user_id']
         today = date.today()
         year_str = request.args.get('year', str(today.year))
         month_str = request.args.get('month', str(today.month))
         q = request.args.get('q', '').strip()
 
-        logging.info(f"Dashboard geladen für Nutzer {user_id}. Jahr: {year_str}, Monat: {month_str}, Suche: '{q}'")
+        # Erkennen, ob wir SQLite oder Postgres nutzen
+        sqlite_mode = is_sqlite()  # Deine Hilfsfunktion, z.B. aus core/db
+        ph = "?" if sqlite_mode else "%s"
+        year_expr = "CAST(strftime('%Y', date) AS INTEGER)" if sqlite_mode else "EXTRACT(YEAR FROM date)"
+        month_expr = "CAST(strftime('%m', date) AS INTEGER)" if sqlite_mode else "EXTRACT(MONTH FROM date)"
 
-        cond, params = ["user_id = %s"], [user_id]
-
-        # --- SQL Query Building Logic (Ensure compatible with both DBs later) ---
-        db_type = os.getenv("DATABASE_TYPE", "postgresql").lower()
-        placeholder = "%s" if db_type == "postgresql" else "?" # Wähle Platzhalter basierend auf DB-Typ
-
-        cond, params = [f"user_id = {placeholder}"], [user_id] # Nutze den gewählten Platzhalter
+        # WHERE‑Klausel zusammensetzen
+        cond = [f"user_id = {ph}"]
+        params = [user_id]
 
         if year_str.lower() == 'archiv':
-            # SQLite Datum/Zeit Funktionen können anders sein
-            if db_type == "postgresql":
-                cond.append("EXTRACT(YEAR FROM date) BETWEEN 2020 AND EXTRACT(YEAR FROM CURRENT_DATE)")
-            elif db_type == "sqlite":
-                 cond.append("CAST(strftime('%Y', date) AS INTEGER) BETWEEN 2020 AND CAST(strftime('%Y', 'now') AS INTEGER)") # Beispiel für SQLite Datum
+            cond.append(f"{year_expr} BETWEEN 2020 AND {year_expr}")
         else:
             try:
-                year = int(year_str)
-                if db_type == "postgresql":
-                    cond.append(f"EXTRACT(YEAR FROM date) = {placeholder}")
-                    params.append(year)
-                elif db_type == "sqlite":
-                    cond.append(f"CAST(strftime('%Y', date) AS INTEGER) = {placeholder}")
-                    params.append(year)
+                y = int(year_str)
+                cond.append(f"{year_expr} = {ph}")
+                params.append(y)
             except ValueError:
-                logging.warning(f"Dashboard: Ungültiges Jahresformat '{year_str}' erhalten. Jahresfilter übersprungen.")
+                logging.warning("Ungültiges Jahresformat, überspringe Jahresfilter")
 
-
-        if year_str != 'archiv':
+        if year_str.lower() != 'archiv':
             try:
-                month = int(month_str)
-                if 1 <= month <= 12:
-                    if db_type == "postgresql":
-                        cond.append(f"EXTRACT(MONTH FROM date) = {placeholder}")
-                        params.append(month)
-                    elif db_type == "sqlite":
-                         cond.append(f"CAST(strftime('%m', date) AS INTEGER) = {placeholder}")
-                         params.append(month)
+                m = int(month_str)
+                if 1 <= m <= 12:
+                    cond.append(f"{month_expr} = {ph}")
+                    params.append(m)
             except ValueError:
                 pass
 
         if q:
-            cond.append(f"(LOWER(description) LIKE {placeholder} OR LOWER(\"usage\") LIKE {placeholder})")
-            like_q = f"%{q.lower()}%"
-            params.extend([like_q, like_q])
+            cond.append(f"(LOWER(description) LIKE {ph} OR LOWER(\"usage\") LIKE {ph})")
+            likeq = f"%{q.lower()}%"
+            params += [likeq, likeq]
 
         sql = f"""
             SELECT id, date, description, "usage", amount, paid, recurring_id
               FROM transactions
              WHERE {' AND '.join(cond)}
-             ORDER BY date ASC, id ASC
+             ORDER BY date, id
         """
 
+        # Abfrage ausführen
         conn = None
         rows = []
         try:
-            conn = get_db_connection() # Verwendet die angepasste Funktion
+            conn = get_db_connection()
             cur = conn.cursor()
             cur.execute(sql, params)
             rows = cur.fetchall()
             logging.info(f"Dashboard: {len(rows)} Transaktionen gefunden.")
-
         except Exception as e:
             logging.error("Dashboard: Fehler beim Abrufen der Transaktionen:", exc_info=True)
-            rows = []
             flash("Fehler beim Laden der Transaktionen.", 'error')
         finally:
-             if conn:
+            if conn:
                 conn.close()
 
+        # Zeilen verarbeiten
         transactions = []
-        try:
-            transactions = [
-                {
-                    'id': r[0],
-                    'date': date.fromisoformat(r[1]) if isinstance(r[1], str) else r[1], # Konvertiere Datum bei Bedarf (SQLite gibt oft Strings zurück)
-                    'description': r[2],
-                    'usage': r[3],
-                    'amount': float(r[4]), # Betrag als Float
-                    'paid': bool(r[5]) if isinstance(r[5], int) else bool(r[5]), # SQLite gibt 0/1 (int) für BOOLEAN zurück
-                    'recurring_id': r[6],
-                }
-                for r in rows
-            ]
-        except Exception as e:
-             logging.error("Dashboard: Fehler beim Verarbeiten der Transaktionsergebnisse:", exc_info=True)
-             transactions = []
+        for r in rows:
+            date_val = r[1]
+            if isinstance(date_val, str):
+                date_val = date.fromisoformat(date_val)
+            transactions.append({
+                'id': r[0],
+                'date': date_val,
+                'description': r[2],
+                'usage': r[3],
+                'amount': float(r[4]),
+                'paid': bool(r[5]),
+                'recurring_id': r[6],
+            })
 
-
-        saldo = 0.0
-        offen = 0.0
-        try:
-            saldo = sum(float(t.get('amount', 0)) for t in transactions)
-            offen = sum(
-                -float(t.get('amount', 0))
-                for t in transactions
-                if float(t.get('amount', 0)) < 0 and not t.get('paid', True) and t.get('recurring_id') is not None
-            )
-        except ValueError:
-             logging.error("Dashboard: Konnte Saldo/offene Fixkosten nicht berechnen, ungültiger Betrag gefunden.", exc_info=True)
-             saldo = 0.0
-             offen = 0.0
-
+        # Saldo und offene Fixkosten berechnen
+        saldo = sum(t['amount'] for t in transactions)
+        offen = sum(
+            -t['amount']
+            for t in transactions
+            if t['amount'] < 0 and not t['paid'] and t['recurring_id'] is not None
+        )
         logging.info(f"Dashboard: Berechneter Saldo: {saldo}, Offene Fixkosten: {offen}")
 
+        # Verfügbare Jahre und Monate ermitteln
         available_years = []
         available_months = []
-        conn = None
         try:
-            conn = get_db_connection() # Verwendet die angepasste Funktion
+            conn = get_db_connection()
             cur = conn.cursor()
-            if db_type == "postgresql":
-                 cur.execute("""
-                    SELECT DISTINCT EXTRACT(YEAR FROM date) AS year
-                    FROM transactions
-                    WHERE user_id = %s
-                    ORDER BY year DESC
-                """, (user_id,))
-            elif db_type == "sqlite":
-                 cur.execute("""
-                    SELECT DISTINCT CAST(strftime('%Y', date) AS INTEGER) AS year
-                    FROM transactions
-                    WHERE user_id = ?
-                    ORDER BY year DESC
-                """, (user_id,))
-            available_years = [int(row[0]) for row in cur.fetchall()]
 
-            if year_str != 'archiv':
-                 try:
-                    selected_year = int(year_str)
-                    if db_type == "postgresql":
-                         cur.execute("""
-                            SELECT DISTINCT EXTRACT(MONTH FROM date) AS month
-                            FROM transactions
-                            WHERE user_id = %s AND EXTRACT(YEAR FROM date) = %s
-                            ORDER BY month ASC
-                        """, (user_id, selected_year))
-                    elif db_type == "sqlite":
-                         cur.execute("""
-                            SELECT DISTINCT CAST(strftime('%m', date) AS INTEGER) AS month
-                            FROM transactions
-                            WHERE user_id = ? AND CAST(strftime('%Y', date) AS INTEGER) = ?
-                            ORDER BY month ASC
-                        """, (user_id, selected_year))
-                    available_months = [int(row[0]) for row in cur.fetchall()]
-                 except ValueError:
-                     logging.warning(f"Dashboard: Konnte Monate für ungültiges Jahr '{year_str}' nicht abrufen.")
+            # Jahre
+            cur.execute(
+                f"""
+                SELECT DISTINCT {year_expr} AS year
+                  FROM transactions
+                 WHERE user_id = {ph}
+                 ORDER BY year DESC
+                """,
+                (user_id,)
+            )
+            available_years = [int(r[0]) for r in cur.fetchall()]
 
+            # Monate (sofern kein Archiv)
+            if year_str.lower() != 'archiv':
+                sel_year = int(year_str)
+                cur.execute(
+                    f"""
+                    SELECT DISTINCT {month_expr} AS month
+                      FROM transactions
+                     WHERE user_id = {ph} AND {year_expr} = {ph}
+                     ORDER BY month ASC
+                    """,
+                    (user_id, sel_year)
+                )
+                available_months = [int(r[0]) for r in cur.fetchall()]
         except Exception as e:
-             logging.error("Dashboard: Fehler beim Abrufen verfügbarer Jahre/Monate:", exc_info=True)
+            logging.error("Dashboard: Fehler beim Abrufen verfügbarer Jahre/Monate:", exc_info=True)
         finally:
-             if conn:
+            if conn:
                 conn.close()
 
-
+        # Template rendern
         return render_template(
             'dashboard_template.html',
             username=session.get('username'),
@@ -921,58 +797,26 @@ def create_app():
                   return redirect(url_for('login', desktop='1'))
              else:
                   return redirect(url_for('login'))
-    # ---------------------------------------------------------------------------
-
 
     # --- Blueprint Registrierungen ---
-    # Stelle sicher, dass diese NACH allen @app.route Definitionen kommen
-    app.register_blueprint(vorschlaege_bp)
-    app.register_blueprint(api_bp, url_prefix="/api")
+    # --- RESTX API und Blueprints registrieren ---
+    # --- RESTX API und Blueprints registrieren ---
+    # 1) binde flask_restx.Api an die App
+    api.init_app(app)
 
-    # --- Registriere Error Handler (Optional) ---
-    # Füge diese hinzu, um benutzerdefinierte Fehlerseiten zu zeigen
-    # @app.errorhandler(404)
-    # def page_not_found(e):
-    #     logging.warning(f"404 Not Found: {request.url}")
-    #     # app_version, is_desktop etc. kommen über context_processor
-    #     return render_template('404.html'), 404
+    # 2) registriere Deine Blueprints
+    app.register_blueprint(vorschlaege_bp)  # Vorschläge unter /<prefix>
+    app.register_blueprint(sync_bp)         # Sync-API unter /api/sync
 
-    # @app.errorhandler(500)
-    # def internal_server_error(e):
-    #     logging.error(f"500 Internal Server Error: {request.url}", exc_info=True)
-    #     # app_version, is_desktop etc. kommen über context_processor
-    #     return render_template('500.html'), 500
+    return app
 
 
-    return app # Gebe die Flask-App Instanz zurück
-
-
-# --- Hauptausführung ---
 if __name__ == '__main__':
-    # Erstelle die App-Instanz
     app = create_app()
-    # Logge die gestartete Version beim Ausführen dieser Datei
     try:
-         from core.version import __version__ as app_version_for_log
-         logging.info(f"Starte Flask-App Version {app_version_for_log}")
+        from core.version import __version__ as app_version_for_log
+        logging.info(f"Starte Flask-App Version {app_version_for_log}")
     except ImportError:
-         logging.warning("Konnte core.version nicht importieren für Startmeldung.")
-
-    # Führe die App aus.
-    # debug=True nur während der Entwicklung verwenden! In Produktion False.
-    # use_reloader=False ist wichtig im Multithreading/Desktop-Kontext, um Doppelstarts zu vermeiden.
-    # Passe den Port ggf. an, falls 5000 schon belegt ist.
-    # host='127.0.0.1' ist Standard, kann aber explizit gesetzt werden.
-    # >>> Standardmäßig Flask für Web zugänglich machen, wenn nicht im Desktop-Modus gestartet wird <<<
-    # Dies erfordert, dass desktop_app.py die App anders startet oder dass der host hier angepasst wird
-    # wenn pywebview verwendet wird.
-    # Wenn nur app.py gestartet wird, ist host='127.0.0.1' okay.
-    # Wenn desktop_app.py gestartet wird, startet es die App und Pywebview.
-    # app.run(debug=False, port=5000, use_reloader=False) # Diesen Aufruf nur, wenn app.py direkt gestartet wird!
-
-    # Die Logik zum Starten der App in desktop_app.py ist anders, dort wird webview.create_window genutzt.
-    # Dieser __main__ Block hier ist nur relevant, wenn man app.py DIREKT ausführt (Web-Version).
+        logging.warning("Konnte core.version nicht importieren für Startmeldung.")
     logging.info("Starte Flask im reinen Web-Modus (direkt via app.py).")
-    # Wenn du möchtest, dass die Web-Version von extern erreichbar ist, ändere host='0.0.0.0' (Vorsicht!)
-    # Für lokale Entwicklung host='127.0.0.1'
     app.run(debug=False, port=5000, use_reloader=False, host='127.0.0.1')

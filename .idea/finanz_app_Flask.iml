@@ -6,7 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/.venvall" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.13 virtualenv at C:\Users\Student\finanz_app_Flask\.venvall" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.13 (finanz_app)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

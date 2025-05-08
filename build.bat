@@ -6,7 +6,7 @@ rem Setzt SCRIPT_DIR auf das Verzeichnis, in dem dieses Batch-Skript liegt.
 set SCRIPT_DIR=%~dp0
 
 REM === VERSION DEFINIEREN ===
-set VERSION=1.0.1
+set VERSION=1.3.0
 set OUTDIR=dist\FinanzApp_%VERSION%
 rem Annahme: icon liegt im Skript-Verzeichnis im selben Ordner wie das Skript selbst
 set ICON=%SCRIPT_DIR%finanz_icon.ico
